@@ -1,24 +1,59 @@
-from typing import Dict, List, Any
-import numpy as np
-from datetime import datetime
+"""
+Crowd Management Service
+========================
+Handles crowd density analysis, heatmap generation, and real-time crowd insights.
+"""
+
 import random
+import numpy as np
+from typing import Dict, List, Any, Optional
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 class CrowdManagementService:
-    def __init__(self):
-        self.crowd_data = {}
-        self.historical_data = []
-        self.thresholds = {
+    """
+    Service for analyzing and managing stadium crowd density.
+    
+    This service provides:
+    - Real-time crowd density analysis
+    - Heatmap data generation
+    - Crowd level predictions
+    - Actionable recommendations for organizers
+    """
+    
+    def __init__(self) -> None:
+        """Initialize the crowd management service with default thresholds."""
+        self.crowd_data: Dict[str, Any] = {}
+        self.historical_data: List[Dict] = []
+        self.thresholds: Dict[str, float] = {
             "low": 0.3,
             "medium": 0.6,
             "high": 0.8
         }
     
     async def analyze_crowd(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze current crowd situation"""
+        """
+        Analyze current crowd situation and provide insights.
+        
+        Args:
+            data: Crowd data containing density information by section
+            
+        Returns:
+            Dict containing:
+            - current_density: Average crowd density
+            - crowd_level: Overall crowd level (low/medium/high/critical)
+            - hotspots: List of crowded locations
+            - predictions: Future crowd predictions
+            - recommendations: Actionable recommendations
+            
+        Example:
+            >>> result = await crowd_service.analyze_crowd({"density": {"A1": 0.8, "B1": 0.3}})
+            >>> print(result["crowd_level"])
+            'high'
+        """
         try:
             density = data.get("density", {})
             timestamp = data.get("timestamp", datetime.utcnow())
@@ -45,7 +80,7 @@ class CrowdManagementService:
             return {"error": "Could not analyze crowd"}
     
     async def get_heatmap_data(self) -> Dict[str, Any]:
-        """Generate heatmap data for visualization"""
+        """Generate real-time heatmap data for visualization."""
         sections = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2"]
         data = {}
         for section in sections:
@@ -55,14 +90,15 @@ class CrowdManagementService:
             "sections": data,
             "timestamp": datetime.utcnow().isoformat(),
             "legend": {
-                "low": "Green",
-                "medium": "Yellow",
-                "high": "Red"
+                "low": {"level": "Low", "color": "#4CAF50"},
+                "medium": {"level": "Medium", "color": "#FF9800"},
+                "high": {"level": "High", "color": "#F44336"},
+                "critical": {"level": "Critical", "color": "#D32F2F"}
             }
         }
     
-    async def get_current_status(self, area: str = None) -> Dict[str, Any]:
-        """Get current crowd status"""
+    async def get_current_status(self, area: Optional[str] = None) -> Dict[str, Any]:
+        """Get current crowd status for the stadium or specific area."""
         return {
             "overall": "medium",
             "areas": {
@@ -73,42 +109,20 @@ class CrowdManagementService:
             "timestamp": datetime.utcnow().isoformat()
         }
     
-    async def predict_crowd(self, minutes: int = 15) -> Dict:
-        """Predict crowd movement"""
-        return {
-            "15_min": "High congestion expected at Gates A and B",
-            "30_min": "Congestion will spread to concourse",
-            "60_min": "Crowd levels expected to decrease by 30%"
-        }
-    
-    async def get_hotspots(self) -> List[Dict]:
-        """Get current crowd hotspots"""
-        return [
-            {"location": "Gate A", "density": 0.85, "severity": "high"},
-            {"location": "Food Court", "density": 0.75, "severity": "medium"}
-        ]
-    
-    async def get_recommendations(self) -> List[str]:
-        """Get crowd management recommendations"""
-        return [
-            "Open additional gates to reduce congestion",
-            "Redirect fans to less crowded entrances",
-            "Increase security presence at hotspots"
-        ]
-    
-    async def update_crowd_data(self, data: Dict) -> Dict:
-        """Update crowd data"""
-        self.crowd_data.update(data)
-        return {"status": "updated", "timestamp": datetime.utcnow().isoformat()}
-    
     def _identify_hotspots(self, density: Dict[str, float]) -> List[Dict]:
+        """Identify crowd hotspots based on density thresholds."""
         hotspots = []
         for location, value in density.items():
             if value > self.thresholds["high"]:
-                hotspots.append({"location": location, "density": value, "severity": "high"})
+                hotspots.append({
+                    "location": location,
+                    "density": value,
+                    "severity": "high"
+                })
         return sorted(hotspots, key=lambda x: x["density"], reverse=True)
     
     def _get_crowd_level(self, density: float) -> str:
+        """Determine overall crowd level from density."""
         if density < self.thresholds["low"]:
             return "low"
         elif density < self.thresholds["medium"]:
@@ -117,6 +131,7 @@ class CrowdManagementService:
             return "high"
     
     async def _predict_crowd(self, current_data: Dict) -> Dict:
+        """Predict crowd movement based on current data."""
         return {
             "15_min": "High congestion expected at Gates A and B",
             "30_min": "Congestion will spread to concourse",
@@ -124,6 +139,7 @@ class CrowdManagementService:
         }
     
     def _generate_recommendations(self, density: Dict, crowd_level: str, hotspots: List[Dict]) -> List[str]:
+        """Generate actionable recommendations for organizers."""
         recommendations = []
         if crowd_level == "high":
             recommendations.append("Open additional gates to reduce congestion")

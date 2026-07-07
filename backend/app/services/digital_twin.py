@@ -1,14 +1,7 @@
 """
-Digital Twin Service
-====================
-Real-time stadium simulation and predictive crowd analytics.
-
-This service simulates crowd movement and provides predictive insights
-for stadium organizers to make proactive decisions about:
-- Gate openings
-- Staff deployment
-- Emergency response
-- Queue management
+Digital Twin Service - Predictive Crowd Simulation
+===================================================
+Provides real-time crowd simulation and prediction for stadium operations.
 """
 
 import random
@@ -23,14 +16,12 @@ class DigitalTwinService:
     """
     Digital Twin service for crowd simulation and prediction.
     
-    This service acts as a real-time simulation engine that predicts
-    crowd movement patterns and provides actionable insights.
-    
-    Attributes:
-        sections: List of stadium section IDs
-        gates: List of gate IDs
-        crowd_density: Current density per section (0-1)
-        simulation_running: Whether simulation is active
+    This service simulates crowd movement in the stadium to help
+    organizers make proactive decisions about:
+    - Gate openings
+    - Staff deployment
+    - Emergency response
+    - Queue management
     """
     
     def __init__(self) -> None:
@@ -47,10 +38,9 @@ class DigitalTwinService:
     def _initialize_density(self) -> None:
         """Initialize crowd density with realistic random values."""
         for section in self.sections:
-            # Realistic starting density between 0.1 and 0.7
             self.crowd_density[section] = random.uniform(0.1, 0.7)
     
-    async def predict_congestion(self, section: str = None, minutes: int = 30) -> Dict[str, Any]:
+    async def predict_congestion(self, section: Optional[str] = None, minutes: int = 30) -> Dict[str, Any]:
         """
         Predict congestion for a specific section or all sections.
         
@@ -62,11 +52,7 @@ class DigitalTwinService:
             minutes: Prediction timeframe in minutes (default: 30)
             
         Returns:
-            Dict containing:
-            - predictions: Per-section predictions
-            - summary: Overall congestion summary
-            - actionable_alerts: Alerts requiring action
-            - timestamp: Prediction time
+            Dict containing predictions, summary, and actionable alerts
             
         Example:
             >>> result = await digital_twin.predict_congestion('A1', 15)
@@ -81,8 +67,6 @@ class DigitalTwinService:
         
         for sec in sections_to_predict:
             current = self.crowd_density.get(sec, 0.3)
-            
-            # Predictive model with random walk and trend
             trend = random.uniform(-0.02, 0.04)
             predicted = max(0.0, min(1.0, current + trend * (minutes / 15)))
             
@@ -115,11 +99,7 @@ class DigitalTwinService:
             return "critical"
     
     def _get_recommendation(self, section: str, density: float) -> str:
-        """
-        Generate actionable recommendation based on predicted density.
-        
-        These recommendations help organizers take proactive action.
-        """
+        """Generate actionable recommendation based on predicted density."""
         if density > 0.8:
             return f"🚨 CRITICAL: Open additional gates near {section}. Deploy 3 extra staff immediately."
         elif density > 0.6:
@@ -147,11 +127,7 @@ class DigitalTwinService:
         }
     
     def _get_alerts(self, predictions: Dict) -> List[Dict]:
-        """
-        Generate actionable alerts from predictions.
-        
-        Alerts are generated for sections with 'critical' or 'high' levels.
-        """
+        """Generate actionable alerts from predictions."""
         alerts = []
         for section, data in predictions.items():
             if isinstance(data, dict) and data.get('level') in ['critical', 'high']:
