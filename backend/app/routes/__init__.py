@@ -9,7 +9,8 @@ from app.routes import (
     accessibility,
     digital_twin,
     analytics ,
-    predictive
+    predictive,
+    monitoring
 )
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "accessibility",
     "digital_twin",
     "analytics",
-    "predictive"
+    "predictive",
+    "monitoring"
 ]

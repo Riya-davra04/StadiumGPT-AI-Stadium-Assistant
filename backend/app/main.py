@@ -13,7 +13,7 @@ import os
 # Import routes
 from app.routes import (
     auth, navigation, crowds, queues,
-    emergency, transport, volunteer, accessibility, digital_twin , analytics , predictive
+    emergency, transport, volunteer, accessibility, digital_twin , analytics , predictive ,monitoring
 )
 
 # Import services
@@ -156,6 +156,7 @@ app.include_router(accessibility.router, prefix="/api/accessibility", tags=["Acc
 app.include_router(digital_twin.router, prefix="/api/digital-twin", tags=["Digital Twin"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(predictive.router, prefix="/api/predictive", tags=["Predictive Analytics"])
+app.include_router(monitoring.router, prefix="/api/monitoring", tags=["Monitoring"])
 
 
 # ============================================
