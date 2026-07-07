@@ -1,29 +1,29 @@
 from app.routes import (
+    accessibility,
+    analytics,
     auth,
-    navigation,
     crowds,
-    queues,
+    digital_twin,
     emergency,
+    monitoring,
+    navigation,
+    predictive,
+    queues,
     transport,
     volunteer,
-    accessibility,
-    digital_twin,
-    analytics ,
-    predictive,
-    monitoring
 )
 
 __all__ = [
+    "accessibility",
+    "analytics",
     "auth",
-    "navigation",
     "crowds",
-    "queues",
+    "digital_twin",
     "emergency",
+    "monitoring",
+    "navigation",
+    "predictive",
+    "queues",
     "transport",
     "volunteer",
-    "accessibility",
-    "digital_twin",
-    "analytics",
-    "predictive",
-    "monitoring"
 ]

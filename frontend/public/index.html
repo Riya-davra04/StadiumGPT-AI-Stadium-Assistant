@@ -10,12 +10,36 @@
       content="StadiumGPT - AI Smart Stadium Assistant for FIFA World Cup"
     />
     <title>StadiumGPT - AI Smart Stadium</title>
+
+    <!-- Skip-to-content styling for keyboard/AT users -->
+    <style>
+      .skip-link {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: #1976D2;
+        color: #ffffff;
+        padding: 12px 16px;
+        z-index: 10000;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+      .skip-link:focus {
+        left: 8px;
+        top: 8px;
+        outline: 3px solid #FFC107;
+      }
+    </style>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body>
+    <a href="#main-content" class="skip-link" data-testid="skip-to-main-content">
+      Skip to main content
+    </a>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
   </body>
