@@ -187,6 +187,4 @@ cd D:\stadium-gpt
 git add README.md
 git commit -m "Update README with architecture, alignment, and features"
 git push
-```
 
----
