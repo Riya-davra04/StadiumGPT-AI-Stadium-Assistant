@@ -1157,4 +1157,4 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## ⭐ Star Us!
 
-[![GitHub stars](https://img.shields.io/github/stars/Riya-davra04/stadium-gpt?style=social)](https://github.com/Riya-davra04/stadium-gpt)
+[![GitHub stars](https://github.com/Riya-davra04/StadiumGPT-AI-Stadium-Assistantl)](https://github.com/Riya-davra04/StadiumGPT-AI-Stadium-Assistant)
