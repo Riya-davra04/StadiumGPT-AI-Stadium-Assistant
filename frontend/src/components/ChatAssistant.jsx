@@ -9,8 +9,6 @@ import {
   Avatar,
   Chip,
   Zoom,
-  Fade,
-  LinearProgress,
 } from '@mui/material';
 import {
   Send,
@@ -20,10 +18,10 @@ import {
   Person,
   VolumeUp,
   VolumeOff,
-  Refresh,
 } from '@mui/icons-material';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useAuth } from '../context/AuthContext';
+import { announceToScreenReader, handleKeyboardNavigation } from '../utils/accessibility';
 
 const ChatAssistant = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -55,12 +53,15 @@ const ChatAssistant = () => {
     if (wsMessages.length > 0) {
       const lastMessage = wsMessages[wsMessages.length - 1];
       if (lastMessage.type === 'ai_response' || lastMessage.type === 'chat') {
+        const responseText = lastMessage.content || lastMessage.text || 'Response received';
         setMessages(prev => [...prev, {
-          text: lastMessage.content || lastMessage.text || 'Response received',
+          text: responseText,
           sender: 'ai',
           timestamp: new Date(),
         }]);
         setIsLoading(false);
+        // ✅ Announce response to screen readers
+        announceToScreenReader(`AI responded: ${responseText}`);
       }
     }
   }, [wsMessages]);
@@ -82,6 +83,9 @@ const ChatAssistant = () => {
     const query = input;
     setInput('');
     setIsLoading(true);
+
+    // ✅ Announce to screen readers
+    announceToScreenReader('Sending message');
 
     try {
       await sendMessage('chat', {
@@ -114,6 +118,7 @@ const ChatAssistant = () => {
 
   const handleVoiceInput = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      announceToScreenReader('Voice recognition not supported in this browser', 'assertive');
       alert('Voice recognition is not supported in this browser.');
       return;
     }
@@ -125,18 +130,19 @@ const ChatAssistant = () => {
     recognition.interimResults = false;
 
     setIsListening(true);
+    announceToScreenReader('Listening...');
 
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setInput(transcript);
       setIsListening(false);
-      // Auto-send after voice input
+      announceToScreenReader(`You said: ${transcript}`);
       setTimeout(handleSend, 500);
     };
 
     recognition.onerror = () => {
       setIsListening(false);
-      toast.error('Voice recognition failed. Please try again.');
+      announceToScreenReader('Voice recognition failed', 'assertive');
     };
 
     recognition.onend = () => {
@@ -148,7 +154,7 @@ const ChatAssistant = () => {
 
   const handleSpeak = (text) => {
     if (!('speechSynthesis' in window)) {
-      alert('Text-to-speech is not supported in this browser.');
+      announceToScreenReader('Text-to-speech not supported', 'assertive');
       return;
     }
 
@@ -164,34 +170,34 @@ const ChatAssistant = () => {
     utterance.pitch = 1;
     
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      announceToScreenReader('Speech finished');
+    };
     utterance.onerror = () => setIsSpeaking(false);
 
     window.speechSynthesis.speak(utterance);
+    announceToScreenReader('Speaking...');
   };
 
   return (
     <>
       {!isOpen && (
         <Zoom in={!isOpen}>
-          <Box
-            position="fixed"
-            bottom={24}
-            right={24}
-            zIndex={1000}
-          >
+          <Box position="fixed" bottom={24} right={24} zIndex={1000}>
             <IconButton
               color="primary"
-              onClick={() => setIsOpen(true)}
+              onClick={() => {
+                setIsOpen(true);
+                announceToScreenReader('Chat assistant opened');
+              }}
+              aria-label="Open chat assistant"
               sx={{
                 width: 64,
                 height: 64,
                 bgcolor: 'primary.main',
                 color: 'white',
-                '&:hover': {
-                  bgcolor: 'primary.dark',
-                  transform: 'scale(1.05)',
-                },
+                '&:hover': { bgcolor: 'primary.dark', transform: 'scale(1.05)' },
                 boxShadow: '0 4px 20px rgba(25, 118, 210, 0.4)',
                 transition: 'all 0.2s',
               }}
@@ -206,6 +212,9 @@ const ChatAssistant = () => {
         <Zoom in={isOpen}>
           <Paper
             elevation={8}
+            role="dialog"
+            aria-label="Chat assistant"
+            aria-modal="true"
             sx={{
               position: 'fixed',
               bottom: 24,
@@ -235,9 +244,9 @@ const ChatAssistant = () => {
               }}
             >
               <Box display="flex" alignItems="center" gap={1.5}>
-                <SmartToy />
+                <SmartToy aria-hidden="true" />
                 <Box>
-                  <Typography variant="h6" fontWeight="bold" fontSize="1rem">
+                  <Typography variant="h6" fontWeight="bold" fontSize="1rem" id="chat-title">
                     StadiumGPT Assistant
                   </Typography>
                   <Box display="flex" alignItems="center" gap={1}>
@@ -257,8 +266,12 @@ const ChatAssistant = () => {
               </Box>
               <IconButton
                 size="small"
-                onClick={() => setIsOpen(false)}
-                sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}
+                onClick={() => {
+                  setIsOpen(false);
+                  announceToScreenReader('Chat assistant closed');
+                }}
+                sx={{ color: 'white' }}
+                aria-label="Close chat assistant"
               >
                 <Close />
               </IconButton>
@@ -274,6 +287,9 @@ const ChatAssistant = () => {
                 display: 'flex',
                 flexDirection: 'column',
               }}
+              role="log"
+              aria-label="Chat messages"
+              aria-live="polite"
             >
               {messages.length === 0 ? (
                 <Box
@@ -285,7 +301,7 @@ const ChatAssistant = () => {
                   gap={2}
                   sx={{ opacity: 0.6 }}
                 >
-                  <SmartToy sx={{ fontSize: 56, color: 'grey.400' }} />
+                  <SmartToy sx={{ fontSize: 56, color: 'grey.400' }} aria-hidden="true" />
                   <Typography color="text.secondary" align="center" variant="body2">
                     Hi! I'm StadiumGPT Assistant.
                     <br />
@@ -304,6 +320,12 @@ const ChatAssistant = () => {
                         variant="outlined"
                         size="small"
                         sx={{ maxWidth: '100%' }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => handleKeyboardNavigation(e, () => {
+                          setInput(suggestion);
+                          setTimeout(handleSend, 200);
+                        })}
                       />
                     ))}
                   </Box>
@@ -316,19 +338,14 @@ const ChatAssistant = () => {
                       display="flex"
                       justifyContent={message.sender === 'user' ? 'flex-end' : 'flex-start'}
                       mb={1.5}
-                      sx={{
-                        animation: 'fadeIn 0.3s ease-out',
-                      }}
+                      sx={{ animation: 'fadeIn 0.3s ease-out' }}
+                      role="article"
+                      aria-label={`${message.sender} message: ${message.text}`}
                     >
-                      <Box
-                        display="flex"
-                        gap={1}
-                        alignItems="flex-start"
-                        maxWidth="85%"
-                      >
+                      <Box display="flex" gap={1} alignItems="flex-start" maxWidth="85%">
                         {message.sender === 'ai' && (
                           <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main' }}>
-                            <SmartToy sx={{ fontSize: 14 }} />
+                            <SmartToy sx={{ fontSize: 14 }} aria-hidden="true" />
                           </Avatar>
                         )}
                         <Box>
@@ -358,6 +375,7 @@ const ChatAssistant = () => {
                                 size="small"
                                 onClick={() => handleSpeak(message.text)}
                                 sx={{ p: 0.5 }}
+                                aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
                               >
                                 {isSpeaking ? <VolumeOff fontSize="small" /> : <VolumeUp fontSize="small" />}
                               </IconButton>
@@ -366,7 +384,7 @@ const ChatAssistant = () => {
                         </Box>
                         {message.sender === 'user' && (
                           <Avatar sx={{ width: 28, height: 28, bgcolor: 'grey.400' }}>
-                            <Person sx={{ fontSize: 14 }} />
+                            <Person sx={{ fontSize: 14 }} aria-hidden="true" />
                           </Avatar>
                         )}
                       </Box>
@@ -376,7 +394,7 @@ const ChatAssistant = () => {
                     <Box display="flex" justifyContent="flex-start" mb={1.5}>
                       <Box display="flex" alignItems="center" gap={1}>
                         <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main' }}>
-                          <SmartToy sx={{ fontSize: 14 }} />
+                          <SmartToy sx={{ fontSize: 14 }} aria-hidden="true" />
                         </Avatar>
                         <Box>
                           <Paper
@@ -389,7 +407,7 @@ const ChatAssistant = () => {
                             }}
                           >
                             <Box display="flex" alignItems="center" gap={2}>
-                              <CircularProgress size={20} />
+                              <CircularProgress size={20} aria-label="Loading" />
                               <Typography variant="body2" color="text.secondary">
                                 Thinking...
                               </Typography>
@@ -424,6 +442,7 @@ const ChatAssistant = () => {
                   onKeyPress={handleKeyPress}
                   disabled={isLoading || !isConnected}
                   inputRef={inputRef}
+                  aria-label="Type your question"
                   InputProps={{
                     sx: { 
                       bgcolor: 'grey.50',
@@ -438,6 +457,7 @@ const ChatAssistant = () => {
                   onClick={handleVoiceInput}
                   color={isListening ? 'error' : 'default'}
                   disabled={isLoading || !isConnected}
+                  aria-label={isListening ? 'Stop listening' : 'Voice input'}
                   sx={{
                     bgcolor: isListening ? 'error.light' : 'transparent',
                     '&:hover': {
@@ -451,6 +471,7 @@ const ChatAssistant = () => {
                   color="primary"
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading || !isConnected}
+                  aria-label="Send message"
                   sx={{
                     bgcolor: 'primary.main',
                     color: 'white',
@@ -466,14 +487,6 @@ const ChatAssistant = () => {
                   <Send />
                 </IconButton>
               </Box>
-              {!isConnected && (
-                <Box mt={1}>
-                  <LinearProgress />
-                  <Typography variant="caption" color="text.secondary">
-                    Connecting to server...
-                  </Typography>
-                </Box>
-              )}
             </Box>
           </Paper>
         </Zoom>
