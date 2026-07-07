@@ -26,13 +26,43 @@ async def predict_congestion(
     """
     Predict congestion for a section or all sections.
     
-    Returns actionable insights for organizers.
+    This endpoint uses the Digital Twin simulation engine to predict
+    crowd congestion and provide actionable recommendations.
+    
+    Args:
+        section: Specific section to predict (None for all)
+        minutes: Prediction timeframe in minutes (default: 30)
+        current_user: Authenticated user
+    
+    Returns:
+        Dict with predictions, summary, and actionable alerts
+    
+    Example Response:
+        {
+            "predictions": {
+                "A1": {
+                    "current": 0.65,
+                    "predicted_30min": 0.75,
+                    "level": "high",
+                    "recommendation": "Monitor A1 closely..."
+                }
+            },
+            "summary": {
+                "critical_sections": [],
+                "high_sections": ["A1"],
+                "overall": "high"
+            },
+            "actionable_alerts": [...]
+        }
     """
     try:
         return await digital_twin.predict_congestion(section, minutes)
     except Exception as e:
         logger.error(f"Prediction error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to predict congestion")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to predict congestion: {str(e)}"
+        )
 
 
 @router.get("/dashboard")
@@ -42,32 +72,20 @@ async def get_realtime_dashboard(
     """
     Get real-time dashboard data for organizers.
     
-    Returns live crowd status, estimates, and alerts.
+    Returns live crowd status, attendance estimates, and alerts
+    for all sections in the stadium.
+    
+    Args:
+        current_user: Authenticated user
+    
+    Returns:
+        Dict with sections status and summary statistics
     """
     try:
         return await digital_twin.get_realtime_dashboard()
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get dashboard data")
-
-
-@router.post("/alert/{section}")
-async def create_alert(
-    section: str,
-    message: str = Query(..., description="Alert message"),
-    current_user: Dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Create an alert for a specific section.
-    
-    This can be triggered automatically or manually by organizers.
-    """
-    if current_user.get("role") not in ["organizer", "admin"]:
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
-    
-    return {
-        "section": section,
-        "message": message,
-        "created_by": current_user.get("name"),
-        "timestamp": datetime.utcnow().isoformat()
-    }
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get dashboard data: {str(e)}"
+        )

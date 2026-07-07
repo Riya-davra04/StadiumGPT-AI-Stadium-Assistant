@@ -20,7 +20,7 @@ from app.routes import (
 from app.services import (
     GeminiService, AnalyticsService,
     CrowdManagementService, QueueManagementService,
-    EmergencyService, NavigationService
+    EmergencyService, NavigationService, DigitalTwinService
 )
 
 # Import models
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================
-# ✅ CREATE APP FIRST
+# CREATE APP
 # ============================================
 app = FastAPI(
     title="StadiumGPT - AI Smart Stadium Assistant",
@@ -66,7 +66,7 @@ app = FastAPI(
 
 
 # ============================================
-# ✅ GLOBAL EXCEPTION HANDLER (AFTER APP IS CREATED)
+# GLOBAL EXCEPTION HANDLER
 # ============================================
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -108,7 +108,7 @@ class CustomSecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# CORS - Restrict for production
+# CORS
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
@@ -124,28 +124,20 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# Trusted Host Middleware
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*"]
-)
-
-# Add custom security headers
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 app.add_middleware(CustomSecurityHeadersMiddleware)
-
-# Rate Limiting (60 requests per minute)
 app.add_middleware(RateLimitMiddleware, limit=60, window=60)
 
 
 # ============================================
 # INITIALIZE SERVICES
 # ============================================
-
 gemini_service = GeminiService()
 crowd_service = CrowdManagementService()
 queue_service = QueueManagementService()
 emergency_service = EmergencyService()
 navigation_service = NavigationService()
+digital_twin_service = DigitalTwinService()
 db = Database()
 manager = ConnectionManager()
 
@@ -167,10 +159,8 @@ app.include_router(digital_twin.router, prefix="/api/digital-twin", tags=["Digit
 # ============================================
 # ENDPOINTS
 # ============================================
-
 @app.get("/openapi.json")
 async def get_openapi():
-    """Serve OpenAPI JSON"""
     return app.openapi()
 
 
@@ -191,7 +181,6 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for monitoring"""
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
@@ -205,7 +194,6 @@ async def health_check():
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    """Handle WebSocket connections for real-time updates"""
     await manager.connect(websocket, client_id)
     try:
         while True:
@@ -281,10 +269,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         )
 
 
-# Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup on shutdown"""
     logger.info("Shutting down StadiumGPT...")
     await manager.close_all_connections()
     await db.close_connection()
