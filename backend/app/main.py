@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 from typing import Dict, Any, List
@@ -12,7 +13,7 @@ import os
 # Import routes
 from app.routes import (
     auth, navigation, crowds, queues,
-    emergency, transport, volunteer, accessibility
+    emergency, transport, volunteer, accessibility, digital_twin
 )
 
 # Import services
@@ -39,13 +40,53 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # ============================================
-# ✅ UPDATED: Security Headers with CSP for Swagger UI
+# ✅ CREATE APP FIRST
+# ============================================
+app = FastAPI(
+    title="StadiumGPT - AI Smart Stadium Assistant",
+    description="Revolutionary AI-powered stadium operations platform for FIFA World Cup",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/openapi.json",
+    openapi_tags=[
+        {"name": "Authentication", "description": "User authentication endpoints"},
+        {"name": "Navigation", "description": "Stadium navigation and routing"},
+        {"name": "Crowd Management", "description": "Crowd analytics and heatmaps"},
+        {"name": "Queue Management", "description": "Queue prediction and management"},
+        {"name": "Emergency", "description": "Emergency handling and alerts"},
+        {"name": "Transport", "description": "Transportation information"},
+        {"name": "Volunteer", "description": "Volunteer support tools"},
+        {"name": "Accessibility", "description": "Accessibility features"},
+        {"name": "Digital Twin", "description": "Stadium simulation and predictions"}
+    ]
+)
+
+
+# ============================================
+# ✅ GLOBAL EXCEPTION HANDLER (AFTER APP IS CREATED)
+# ============================================
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for all unhandled exceptions."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "An unexpected error occurred",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+
+# ============================================
+# SECURITY MIDDLEWARE
 # ============================================
 class CustomSecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        # ✅ Updated CSP to allow Swagger UI and OpenAPI
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
@@ -66,36 +107,13 @@ class CustomSecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "geolocation=()"
         return response
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="StadiumGPT - AI Smart Stadium Assistant",
-    description="Revolutionary AI-powered stadium operations platform for FIFA World Cup",
-    version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/openapi.json",  # ✅ Explicitly set OpenAPI URL
-    openapi_tags=[
-        {"name": "Authentication", "description": "User authentication endpoints"},
-        {"name": "Navigation", "description": "Stadium navigation and routing"},
-        {"name": "Crowd Management", "description": "Crowd analytics and heatmaps"},
-        {"name": "Queue Management", "description": "Queue prediction and management"},
-        {"name": "Emergency", "description": "Emergency handling and alerts"},
-        {"name": "Transport", "description": "Transportation information"},
-        {"name": "Volunteer", "description": "Volunteer support tools"},
-        {"name": "Accessibility", "description": "Accessibility features"}
-    ]
-)
-
-# ============================================
-# SECURITY MIDDLEWARE
-# ============================================
 
 # CORS - Restrict for production
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://stadiumgpt.vercel.app",
-    "https://stadiumgpt-ai-stadium-assistant.onrender.com",  # ✅ Add your Render URL
+    "https://stadiumgpt-ai-stadium-assistant.onrender.com",
 ]
 
 app.add_middleware(
@@ -109,7 +127,7 @@ app.add_middleware(
 # Trusted Host Middleware
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"]  # Configure for production
+    allowed_hosts=["*"]
 )
 
 # Add custom security headers
@@ -117,6 +135,7 @@ app.add_middleware(CustomSecurityHeadersMiddleware)
 
 # Rate Limiting (60 requests per minute)
 app.add_middleware(RateLimitMiddleware, limit=60, window=60)
+
 
 # ============================================
 # INITIALIZE SERVICES
@@ -130,7 +149,10 @@ navigation_service = NavigationService()
 db = Database()
 manager = ConnectionManager()
 
-# Include routers
+
+# ============================================
+# INCLUDE ROUTERS
+# ============================================
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(navigation.router, prefix="/api/navigation", tags=["Navigation"])
 app.include_router(crowds.router, prefix="/api/crowds", tags=["Crowd Management"])
@@ -139,14 +161,48 @@ app.include_router(emergency.router, prefix="/api/emergency", tags=["Emergency"]
 app.include_router(transport.router, prefix="/api/transport", tags=["Transport"])
 app.include_router(volunteer.router, prefix="/api/volunteer", tags=["Volunteer"])
 app.include_router(accessibility.router, prefix="/api/accessibility", tags=["Accessibility"])
+app.include_router(digital_twin.router, prefix="/api/digital-twin", tags=["Digital Twin"])
 
-# ✅ Add OpenAPI endpoint if needed
+
+# ============================================
+# ENDPOINTS
+# ============================================
+
 @app.get("/openapi.json")
 async def get_openapi():
     """Serve OpenAPI JSON"""
     return app.openapi()
 
-# WebSocket for real-time updates
+
+@app.get("/")
+async def root():
+    return {
+        "name": "StadiumGPT",
+        "version": "1.0.0",
+        "status": "operational",
+        "timestamp": datetime.utcnow().isoformat(),
+        "endpoints": {
+            "docs": "/api/docs",
+            "health": "/health",
+            "websocket": "/ws/{client_id}"
+        }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {
+            "database": await db.check_connection(),
+            "gemini": await gemini_service.check_health(),
+            "websocket": len(manager.active_connections)
+        }
+    }
+
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """Handle WebSocket connections for real-time updates"""
@@ -224,34 +280,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             client_id
         )
 
-# Root endpoint
-@app.get("/")
-async def root():
-    return {
-        "name": "StadiumGPT",
-        "version": "1.0.0",
-        "status": "operational",
-        "timestamp": datetime.utcnow().isoformat(),
-        "endpoints": {
-            "docs": "/api/docs",
-            "health": "/health",
-            "websocket": "/ws/{client_id}"
-        }
-    }
-
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "services": {
-            "database": await db.check_connection(),
-            "gemini": await gemini_service.check_health(),
-            "websocket": len(manager.active_connections)
-        }
-    }
 
 # Shutdown event
 @app.on_event("shutdown")
@@ -260,6 +288,7 @@ async def shutdown_event():
     logger.info("Shutting down StadiumGPT...")
     await manager.close_all_connections()
     await db.close_connection()
+
 
 if __name__ == "__main__":
     uvicorn.run(
