@@ -6,6 +6,7 @@ from app.services.emergency import EmergencyService
 from app.services.analytics import AnalyticsService
 from app.services.auth import AuthService
 from app.services.digital_twin import DigitalTwinService
+from app.services.predictive_analytics import PredictiveAnalyticsService
 
 __all__ = [
     "GeminiService",
@@ -15,5 +16,6 @@ __all__ = [
     "EmergencyService",
     "AnalyticsService",
     "AuthService",
-    "DigitalTwinService"
+    "DigitalTwinService",
+    "PredictiveAnalyticsService"
 ]
