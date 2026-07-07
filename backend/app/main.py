@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 from typing import Dict, Any, List
 import logging
@@ -29,7 +30,7 @@ from app.utils.database import Database
 from app.utils.websocket import ConnectionManager
 
 # Import security middleware
-from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
+from app.middleware.security import RateLimitMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +39,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ============================================
+# ✅ UPDATED: Security Headers with CSP for Swagger UI
+# ============================================
+class CustomSecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # ✅ Updated CSP to allow Swagger UI and OpenAPI
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://fastapi.tiangolo.com; "
+            "font-src 'self' data:; "
+            "connect-src 'self' https://cdn.jsdelivr.net https://*.jsdelivr.net; "
+            "frame-src 'self'; "
+            "object-src 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=()"
+        return response
+
 # Initialize FastAPI app
 app = FastAPI(
     title="StadiumGPT - AI Smart Stadium Assistant",
@@ -45,6 +73,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    openapi_url="/openapi.json",  # ✅ Explicitly set OpenAPI URL
     openapi_tags=[
         {"name": "Authentication", "description": "User authentication endpoints"},
         {"name": "Navigation", "description": "Stadium navigation and routing"},
@@ -66,6 +95,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://stadiumgpt.vercel.app",
+    "https://stadiumgpt-ai-stadium-assistant.onrender.com",  # ✅ Add your Render URL
 ]
 
 app.add_middleware(
@@ -81,31 +111,6 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["*"]  # Configure for production
 )
-
-# ============================================
-# ✅ UPDATED: Security Headers with CSP for Swagger UI
-# ============================================
-from starlette.middleware.base import BaseHTTPMiddleware
-
-class CustomSecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        # ✅ Updated CSP to allow Swagger UI
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "img-src 'self' data: https://fastapi.tiangolo.com; "
-            "font-src 'self' data:; "
-            "connect-src 'self'"
-        )
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "geolocation=()"
-        return response
 
 # Add custom security headers
 app.add_middleware(CustomSecurityHeadersMiddleware)
@@ -134,6 +139,12 @@ app.include_router(emergency.router, prefix="/api/emergency", tags=["Emergency"]
 app.include_router(transport.router, prefix="/api/transport", tags=["Transport"])
 app.include_router(volunteer.router, prefix="/api/volunteer", tags=["Volunteer"])
 app.include_router(accessibility.router, prefix="/api/accessibility", tags=["Accessibility"])
+
+# ✅ Add OpenAPI endpoint if needed
+@app.get("/openapi.json")
+async def get_openapi():
+    """Serve OpenAPI JSON"""
+    return app.openapi()
 
 # WebSocket for real-time updates
 @app.websocket("/ws/{client_id}")
