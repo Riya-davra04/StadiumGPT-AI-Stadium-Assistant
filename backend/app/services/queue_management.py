@@ -1,4 +1,4 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import numpy as np
 from datetime import datetime, timedelta
 import random
@@ -6,6 +6,7 @@ import logging
 from app.utils.batch import CacheManager
 
 logger = logging.getLogger(__name__)
+
 
 class QueueManagementService:
     def __init__(self):
@@ -101,3 +102,72 @@ class QueueManagementService:
                 "merch_queues": [name for name in results if name.startswith("merch")]
             }
         }
+    
+    async def find_best_option(self, category: str, max_wait: int = 10) -> Optional[Dict]:
+        """
+        Find the best queue option based on category and max wait time
+        
+        Args:
+            category (str): Category to search (food, restroom, merch)
+            max_wait (int): Maximum acceptable wait time in minutes
+        
+        Returns:
+            Optional[Dict]: Best option found, or None
+        """
+        try:
+            options = []
+            
+            for name, data in self.establishments.items():
+                if name.startswith(category):
+                    status = await self.predict_wait_time(name)
+                    wait_time = status.get("estimated_wait", 999)
+                    if wait_time <= max_wait:
+                        options.append({
+                            "name": name,
+                            "wait_time": wait_time,
+                            "status": status.get("status", "unknown"),
+                            "queue_length": status.get("queue_length", 0)
+                        })
+            
+            if options:
+                return min(options, key=lambda x: x["wait_time"])
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Find best option error: {e}")
+            return None
+    
+    async def get_recommendations(self, current_location: str, category: str = None) -> List[Dict]:
+        """Get personalized queue recommendations"""
+        recommendations = []
+        
+        for name, data in self.establishments.items():
+            if category and not name.startswith(category):
+                continue
+            status = await self.predict_wait_time(name)
+            if status.get("status") == "available" and status.get("queue_length", 0) < 10:
+                recommendations.append({
+                    "name": name,
+                    "wait_time": status.get("estimated_wait", 0),
+                    "queue_length": status.get("queue_length", 0),
+                    "status": "Recommended"
+                })
+        
+        return sorted(recommendations, key=lambda x: x["wait_time"])[:5]
+    
+    async def update_queue(self, data: Dict) -> Dict:
+        """Update queue data"""
+        try:
+            establishment = data.get("establishment")
+            queue_length = data.get("queue_length")
+            
+            if establishment and queue_length is not None:
+                self.queue_data[establishment] = queue_length
+                # Clear cache for this establishment
+                self.cache.clear(f"queue:{establishment}")
+            
+            return {"status": "updated", "timestamp": datetime.utcnow().isoformat()}
+        except Exception as e:
+            logger.error(f"Update queue error: {e}")
+            raise

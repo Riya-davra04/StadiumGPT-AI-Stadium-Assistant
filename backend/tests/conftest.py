@@ -1,25 +1,53 @@
+"""
+Pytest Configuration for StadiumGPT Tests
+==========================================
+This module provides fixtures and configuration for the test suite.
+"""
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 import uuid
+import os
+
+# Set test environment
+os.environ["ENVIRONMENT"] = "test"
+
 
 @pytest.fixture
 def client():
-    """Create test client"""
+    """
+    Create a test client for FastAPI application.
+    
+    Returns:
+        TestClient: Test client for making API requests
+    """
     return TestClient(app)
+
 
 @pytest.fixture
 def test_db():
-    """Create test database - use in-memory for testing"""
+    """
+    Create an in-memory database for testing.
+    
+    Returns:
+        Database: Test database instance
+    """
     from app.utils.database import Database
     db = Database()
     db.db_path = ":memory:"
     db._init_db()
     return db
 
+
 @pytest.fixture
 def test_user():
-    """Create test user data with unique email"""
+    """
+    Generate test user data with unique email.
+    
+    Returns:
+        dict: Test user credentials
+    """
     unique_id = uuid.uuid4().hex[:8]
     return {
         "name": "Test User",
@@ -29,15 +57,26 @@ def test_user():
         "language": "English"
     }
 
+
 @pytest.fixture
 def auth_token(client, test_user):
-    """Get auth token for authenticated tests"""
-    # Register user
-    register_response = client.post("/api/auth/register", json=test_user)
+    """
+    Get an authentication token for a test user.
     
-    # If registration fails, try to login anyway (user might exist)
-    if register_response.status_code != 201:
-        pass
+    This fixture registers a user and returns their access token.
+    
+    Args:
+        client: Test client fixture
+        test_user: Test user fixture
+        
+    Returns:
+        str: JWT access token
+        
+    Raises:
+        pytest.skip: If authentication fails
+    """
+    # Register user
+    client.post("/api/auth/register", json=test_user)
     
     # Login
     response = client.post("/api/auth/login", json={
@@ -45,8 +84,26 @@ def auth_token(client, test_user):
         "password": test_user["password"]
     })
     
-    # If login fails, skip the test
+    # Skip test if login fails
     if response.status_code != 200:
-        pytest.skip("Could not get auth token - authentication failed")
+        pytest.skip("Could not get auth token")
     
     return response.json()["access_token"]
+
+
+@pytest.fixture
+def authenticated_client(client, auth_token):
+    """
+    Create a test client with authentication token.
+    
+    Args:
+        client: Test client fixture
+        auth_token: Authentication token fixture
+        
+    Returns:
+        TestClient: Authenticated test client
+    """
+    client.headers = {
+        "Authorization": f"Bearer {auth_token}"
+    }
+    return client

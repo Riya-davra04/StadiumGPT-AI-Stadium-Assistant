@@ -1,3 +1,13 @@
+"""
+Gemini AI Service Module
+========================
+Provides AI-powered features using Google's Gemini API including:
+- Natural language query processing
+- Route optimization
+- Crowd analysis
+- Emergency response guidance
+"""
+
 import google.generativeai as genai
 import os
 import json
@@ -5,11 +15,27 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 from app.services.base_service import BaseService
+import logging
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
 
 class GeminiService(BaseService):
-    """Gemini AI Service for StadiumGPT"""
+    """
+    Gemini AI Service for StadiumGPT.
+    
+    This service integrates Google's Gemini AI to provide:
+    - Conversational AI for fans
+    - Smart route recommendations
+    - Crowd density analysis
+    - Emergency response guidance
+    
+    Attributes:
+        api_key (str): Gemini API key from environment
+        model: Gemini Pro model instance
+        chat_model: Gemini Flash model for faster responses
+    """
     
     def __init__(self, api_key: Optional[str] = None):
         super().__init__("GeminiService")
@@ -18,8 +44,13 @@ class GeminiService(BaseService):
         self.chat_model = None
         self._initialize()
     
-    def _initialize(self):
-        """Initialize Gemini AI models"""
+    def _initialize(self) -> None:
+        """
+        Initialize Gemini AI models.
+        
+        If API key is missing or invalid, service will gracefully degrade
+        with fallback responses.
+        """
         if not self.api_key:
             self.log_warning("No Gemini API key found. AI features will be disabled.")
             return
@@ -33,7 +64,24 @@ class GeminiService(BaseService):
             self.log_error("Failed to initialize Gemini", e)
     
     async def process_query(self, query: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Process user query with context using Gemini"""
+        """
+        Process a user query with context using Gemini AI.
+        
+        Args:
+            query (str): User's question or request
+            context (Dict[str, Any]): Additional context (stadium, section, language)
+            
+        Returns:
+            Dict[str, Any]: Response with AI-generated text and metadata
+            
+        Example:
+            >>> result = await gemini.process_query(
+            ...     "How do I get to Gate B?",
+            ...     {"stadium": "FIFA World Cup Stadium", "language": "English"}
+            ... )
+            >>> print(result["response"])
+            "Head straight for 50 meters, then turn right..."
+        """
         if not self.model:
             return self._get_fallback_response("AI service not available")
         
@@ -44,15 +92,23 @@ class GeminiService(BaseService):
             return {
                 "response": response.text,
                 "timestamp": self.get_timestamp(),
-                "query": query
+                "query": query,
+                "model": "gemini-1.5-pro"
             }
         except Exception as e:
             self.log_error("Gemini query error", e)
             return self._get_fallback_response("Unable to process query")
     
-    # ✅ Add this missing method
     async def analyze_crowd(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze crowd data and provide insights"""
+        """
+        Analyze crowd data and provide actionable insights.
+        
+        Args:
+            data (Dict[str, Any]): Crowd density data by section
+            
+        Returns:
+            Dict[str, Any]: Analysis with predictions and recommendations
+        """
         if not self.model:
             return {
                 "crowd_level": "medium",
@@ -76,7 +132,7 @@ class GeminiService(BaseService):
             response = self.model.generate_content(prompt)
             try:
                 return json.loads(response.text)
-            except:
+            except json.JSONDecodeError:
                 return {
                     "congestion_prediction": "medium",
                     "recommendations": ["Monitor crowd flow", "Open additional gates"],
@@ -91,12 +147,20 @@ class GeminiService(BaseService):
             }
     
     async def get_route(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get navigation route using Gemini"""
+        """
+        Generate optimal route based on preferences and conditions.
+        
+        Args:
+            data (Dict[str, Any]): Route parameters including start, end, preferences
+            
+        Returns:
+            Dict[str, Any]: Route details with path, time, and alternatives
+        """
         if not self.model:
             return {
                 "error": "AI service not available",
                 "fallback": {
-                    "path": ["Gate A", "Concourse", "Section B", "Gate C"],
+                    "path": ["Gate A", "Concourse", "Section B"],
                     "estimated_time": 8,
                     "crowd_level": "medium"
                 }
@@ -122,7 +186,7 @@ class GeminiService(BaseService):
             response = self.model.generate_content(prompt)
             try:
                 return json.loads(response.text)
-            except:
+            except json.JSONDecodeError:
                 return {
                     "path": ["Gate A", "Concourse", data.get('end', 'Destination')],
                     "estimated_time": 8,
@@ -135,11 +199,20 @@ class GeminiService(BaseService):
             return {"error": "Could not generate route"}
     
     async def check_health(self) -> bool:
-        """Check if Gemini service is healthy"""
+        """Check if Gemini service is healthy and ready."""
         return self.model is not None
     
     def _build_prompt(self, query: str, context: Dict[str, Any]) -> str:
-        """Build prompt with context for Gemini"""
+        """
+        Build a structured prompt for Gemini AI.
+        
+        Args:
+            query (str): User's question
+            context (Dict[str, Any]): Context information
+            
+        Returns:
+            str: Formatted prompt for Gemini
+        """
         return f"""
         Context: You are StadiumGPT, an AI assistant for FIFA World Cup stadiums.
         Help fans, volunteers, and staff with stadium-related queries.
@@ -157,7 +230,15 @@ class GeminiService(BaseService):
         """
     
     def _get_fallback_response(self, error_message: str) -> Dict[str, Any]:
-        """Get fallback response when AI fails"""
+        """
+        Generate a graceful fallback response when AI is unavailable.
+        
+        Args:
+            error_message (str): The error that occurred
+            
+        Returns:
+            Dict[str, Any]: Fallback response with error details
+        """
         return {
             "response": f"⚠️ {error_message}. Please try again later.",
             "error": error_message,

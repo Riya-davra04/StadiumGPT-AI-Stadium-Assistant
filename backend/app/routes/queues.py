@@ -4,8 +4,6 @@ from datetime import datetime
 import logging
 
 from app.services.queue_management import QueueManagementService
-from app.services.gemini_service import GeminiService
-from app.models.user import User
 from app.routes.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -13,7 +11,6 @@ router = APIRouter()
 
 # Initialize services
 queue_service = QueueManagementService()
-gemini_service = GeminiService()
 
 
 @router.get("/status/{establishment_id}")
@@ -25,11 +22,11 @@ async def get_queue_status(
     Get queue status for a specific establishment
     
     Args:
-        establishment_id: ID of the establishment
+        establishment_id: ID of the establishment (e.g., food_a, restroom_1)
         current_user: Current authenticated user
     
     Returns:
-        Queue status information
+        Queue status with wait time and availability
     """
     try:
         status = await queue_service.predict_wait_time(establishment_id)
@@ -49,18 +46,18 @@ async def get_queue_status(
 
 @router.get("/all")
 async def get_all_queues(
-    category: Optional[str] = Query(None, description="Filter by category"),
+    category: Optional[str] = Query(None, description="Filter by category: food, restroom, merch"),
     current_user: Dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Get status of all queues
     
     Args:
-        category: Optional category filter (food, restroom, merch)
+        category: Optional category filter
         current_user: Current authenticated user
     
     Returns:
-        All queue statuses
+        All queue statuses with summary
     """
     try:
         queues = await queue_service.get_all_queues()
@@ -86,38 +83,27 @@ async def get_all_queues(
 @router.get("/best-option")
 async def get_best_queue_option(
     category: str = Query(..., description="Category: food, restroom, merch"),
-    max_wait: Optional[int] = Query(10, description="Maximum acceptable wait time"),
+    max_wait: Optional[int] = Query(10, description="Maximum acceptable wait time in minutes"),
     current_user: Dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Get the best queue option based on wait time
     
     Args:
-        category: Category to search
-        max_wait: Maximum acceptable wait time
+        category: Category to search (food, restroom, merch)
+        max_wait: Maximum acceptable wait time in minutes
         current_user: Current authenticated user
     
     Returns:
-        Best queue option
+        Best queue option with wait time and status
     """
     try:
         best_option = await queue_service.find_best_option(category, max_wait)
         
-        # Add AI recommendation
-        if best_option:
-            context = {
-                "category": category,
-                "max_wait": max_wait,
-                "best_option": best_option
-            }
-            ai_recommendation = await gemini_service.process_query(
-                f"Recommend the best {category} option with {max_wait} minutes wait",
-                context
-            )
-            best_option["ai_recommendation"] = ai_recommendation.get("response", "")
-        
         return {
-            "best_option": best_option,
+            "best_option": best_option if best_option else {
+                "message": f"No options available in {category} under {max_wait} minutes"
+            },
             "timestamp": datetime.utcnow().isoformat()
         }
         
@@ -229,20 +215,8 @@ async def get_queue_recommendations(
             category
         )
         
-        # Add AI personalization
-        context = {
-            "current_location": current_location,
-            "category": category,
-            "user_preferences": current_user.get("preferences", {})
-        }
-        ai_recommendation = await gemini_service.process_query(
-            "Provide personalized queue recommendations",
-            context
-        )
-        
         return {
             "recommendations": recommendations,
-            "ai_recommendation": ai_recommendation.get("response", ""),
             "timestamp": datetime.utcnow().isoformat()
         }
         
