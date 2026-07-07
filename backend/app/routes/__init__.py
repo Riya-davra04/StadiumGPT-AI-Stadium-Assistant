@@ -7,7 +7,8 @@ from app.routes import (
     transport,
     volunteer,
     accessibility,
-    digital_twin
+    digital_twin,
+    analytics  
 )
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "transport",
     "volunteer",
     "accessibility",
-    "digital_twin"
+    "digital_twin",
+    "analytics"
 ]
