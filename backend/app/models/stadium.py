@@ -46,6 +46,37 @@ class FacilityType(str, Enum):
     INFORMATION = "information"
 
 
+# ✅ ADD THIS CLASS - Facility
+class Facility(BaseModel):
+    """
+    Stadium facility model.
+    
+    Attributes:
+        id: Facility identifier
+        name: Facility name
+        type: Facility type
+        location: Location description
+        capacity: Maximum capacity
+        current_load: Current load
+        avg_wait_time: Average wait time in minutes
+        status: Current status (available, busy, closed)
+        operating_hours: Operating hours
+        coordinates: GPS coordinates
+        last_updated: Last update timestamp
+    """
+    id: str = Field(..., description="Facility ID")
+    name: str = Field(..., description="Facility name")
+    type: FacilityType
+    location: str = Field(..., description="Location description")
+    capacity: int = Field(..., gt=0, description="Maximum capacity")
+    current_load: int = Field(0, ge=0, description="Current load")
+    avg_wait_time: int = Field(0, ge=0, description="Average wait time in minutes")
+    status: str = Field("available", description="Status: available, busy, closed")
+    operating_hours: Optional[Dict[str, str]] = None
+    coordinates: Optional[Dict[str, float]] = None
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Section(BaseModel):
     """
     Stadium section model.
@@ -139,3 +170,56 @@ class StadiumLayout(BaseModel):
         if 'max_attendance' in info.data and v > info.data['max_attendance']:
             raise ValueError('Current attendance cannot exceed maximum capacity')
         return v
+
+
+# ✅ ADD THESE CLASSES FOR COMPATIBILITY
+class CrowdData(BaseModel):
+    """Crowd data model for API responses."""
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    sections: Dict[str, float] = Field(default={})
+    gates: Dict[str, float] = Field(default={})
+    overall_density: float = Field(..., ge=0, le=1)
+    crowd_level: CrowdLevel
+    hotspots: List[Dict[str, Any]] = Field(default=[])
+    predictions: Dict[str, Any] = Field(default={})
+    recommendations: List[str] = Field(default=[])
+
+
+class QueueData(BaseModel):
+    """Queue data model for API responses."""
+    establishment_id: str
+    queue_length: int = Field(..., ge=0)
+    estimated_wait_time: int = Field(..., ge=0)
+    status: str
+    capacity: int = Field(..., gt=0)
+    current_load_percentage: float = Field(..., ge=0, le=100)
+    recommendations: Optional[List[Dict[str, Any]]] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TransportInfo(BaseModel):
+    """Transport information model."""
+    type: str
+    name: str
+    distance: float
+    estimated_time: int
+    crowd_level: CrowdLevel = CrowdLevel.LOW
+    availability: str = Field(default="available")
+    waiting_time: Optional[int] = None
+    cost: Optional[float] = None
+    directions: List[str] = Field(default=[])
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
+
+
+class StadiumData(BaseModel):
+    """Stadium data model for API responses."""
+    id: str
+    name: str
+    location: str
+    total_capacity: int
+    current_attendance: int = Field(0, ge=0)
+    event: str = "FIFA World Cup"
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    sections: List[Section] = Field(default=[])
+    gates: List[Gate] = Field(default=[])
+    facilities: List[Facility] = Field(default=[])
