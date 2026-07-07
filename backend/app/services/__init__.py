@@ -15,5 +15,6 @@ __all__ = [
     "QueueManagementService",
     "EmergencyService",
     "AnalyticsService",
-    "AuthService"
+    "AuthService",
+    "DigitalTwinService"
 ]
