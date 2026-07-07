@@ -44,15 +44,10 @@ class CrowdManagementService:
         Returns:
             Dict containing:
             - current_density: Average crowd density
-            - crowd_level: Overall crowd level (low/medium/high/critical)
+            - crowd_level: Overall crowd level
             - hotspots: List of crowded locations
             - predictions: Future crowd predictions
             - recommendations: Actionable recommendations
-            
-        Example:
-            >>> result = await crowd_service.analyze_crowd({"density": {"A1": 0.8, "B1": 0.3}})
-            >>> print(result["crowd_level"])
-            'high'
         """
         try:
             density = data.get("density", {})
