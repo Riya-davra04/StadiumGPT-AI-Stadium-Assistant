@@ -2,6 +2,12 @@
 User Models Module
 ==================
 Defines Pydantic models for user authentication and profile management.
+
+This module provides:
+- User registration and login models
+- User profile management
+- Authentication token models
+- Role-based access control
 """
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
