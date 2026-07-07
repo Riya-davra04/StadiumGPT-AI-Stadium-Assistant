@@ -1,3 +1,4 @@
+import json
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import jwt
@@ -5,20 +6,17 @@ import bcrypt
 import uuid
 import os
 import logging
-from passlib.context import CryptContext
 
-from app.models.user import UserCreate, User
+from app.models.user import UserCreate
 from app.utils.database import Database
 
 logger = logging.getLogger(__name__)
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 class AuthService:
     def __init__(self):
         self.db = Database()
-        self.secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this")
+        # Use a simple secret key (in production, use environment variable)
+        self.secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production")
         self.algorithm = "HS256"
         self.access_token_expire_minutes = 60
     
@@ -36,11 +34,11 @@ class AuthService:
                 "password_hash": hashed_password,
                 "role": user_data.role.value,
                 "language": user_data.language,
-                "preferences": {},
+                "preferences": json.dumps({}),
                 "created_at": datetime.utcnow().isoformat(),
                 "last_active": datetime.utcnow().isoformat(),
-                "is_verified": False,
-                "is_active": True
+                "is_verified": 0,
+                "is_active": 1
             }
             
             # Save to database
@@ -57,16 +55,13 @@ class AuthService:
     async def authenticate_user(self, email: str, password: str) -> Optional[Dict[str, Any]]:
         """Authenticate user with email and password"""
         try:
-            # Get user from database
             user = await self.db.get_user_by_email(email)
             if not user:
                 return None
             
-            # Verify password
             if not self._verify_password(password, user.get("password_hash")):
                 return None
             
-            # Return user without password
             user.pop("password_hash", None)
             return user
             
@@ -107,9 +102,7 @@ class AuthService:
             return None
     
     async def invalidate_token(self, token: str) -> bool:
-        """Invalidate a token (for logout)"""
-        # In a real implementation, you'd add the token to a blacklist
-        # For now, just return True
+        """Invalidate a token"""
         return True
     
     async def refresh_token(self, token: str) -> Optional[str]:
@@ -119,7 +112,6 @@ class AuthService:
             if not payload:
                 return None
             
-            # Create new token with extended expiry
             new_token = await self.create_access_token(
                 data={"sub": payload.get("sub"), "email": payload.get("email"), "role": payload.get("role")},
                 expires_delta=timedelta(hours=1)
@@ -133,19 +125,14 @@ class AuthService:
     async def change_password(self, user_id: str, current_password: str, new_password: str) -> bool:
         """Change user password"""
         try:
-            # Get user
             user = await self.db.get_user_by_id(user_id)
             if not user:
                 return False
             
-            # Verify current password
             if not self._verify_password(current_password, user.get("password_hash")):
                 return False
             
-            # Hash new password
             new_hash = self._hash_password(new_password)
-            
-            # Update user
             await self.db.update_user(user_id, {"password_hash": new_hash})
             return True
             

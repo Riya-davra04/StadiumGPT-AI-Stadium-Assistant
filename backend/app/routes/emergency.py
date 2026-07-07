@@ -23,13 +23,6 @@ async def report_emergency(
 ) -> Dict[str, Any]:
     """
     Report an emergency
-    
-    Args:
-        alert_data: Emergency data
-        current_user: Current authenticated user
-    
-    Returns:
-        Emergency response
     """
     try:
         # Add reporter info
@@ -39,25 +32,10 @@ async def report_emergency(
         # Handle emergency
         response = await emergency_service.handle_emergency(alert_data)
         
-        # Add AI-powered instructions
-        if response.get("alert"):
-            context = {
-                "emergency_type": response["alert"].get("type"),
-                "severity": response["alert"].get("severity"),
-                "location": response["alert"].get("location")
-            }
-            ai_instructions = await gemini_service.process_query(
-                f"Provide emergency instructions for {context['emergency_type']} at {context['location']}",
-                context
-            )
-            response["ai_instructions"] = ai_instructions.get("response", "")
-        
+        # ✅ Return response directly
         logger.warning(f"Emergency reported by {current_user.get('id')}: {alert_data.get('type')}")
         
-        return {
-            "response": response,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        return response
         
     except Exception as e:
         logger.error(f"Emergency report error: {e}")
@@ -73,12 +51,6 @@ async def get_active_emergencies(
 ) -> Dict[str, Any]:
     """
     Get all active emergencies
-    
-    Args:
-        current_user: Current authenticated user
-    
-    Returns:
-        List of active emergencies
     """
     try:
         alerts = await emergency_service.get_active_alerts()
@@ -104,13 +76,6 @@ async def get_emergency_details(
 ) -> Dict[str, Any]:
     """
     Get details of a specific emergency
-    
-    Args:
-        alert_id: Emergency ID
-        current_user: Current authenticated user
-    
-    Returns:
-        Emergency details
     """
     try:
         alert = await emergency_service.get_alert(alert_id)
@@ -143,14 +108,6 @@ async def resolve_emergency(
 ) -> Dict[str, Any]:
     """
     Resolve an emergency
-    
-    Args:
-        alert_id: Emergency ID
-        resolution_notes: Notes about resolution
-        current_user: Current authenticated user
-    
-    Returns:
-        Resolution confirmation
     """
     try:
         # Only organizers, staff, and admins can resolve emergencies
@@ -197,13 +154,6 @@ async def get_emergency_stations(
 ) -> Dict[str, Any]:
     """
     Get emergency stations
-    
-    Args:
-        location: Current location for nearest stations
-        current_user: Current authenticated user
-    
-    Returns:
-        List of emergency stations
     """
     try:
         stations = await emergency_service.get_stations(location)
@@ -229,13 +179,6 @@ async def get_medical_emergencies(
 ) -> Dict[str, Any]:
     """
     Get medical emergencies
-    
-    Args:
-        severity: Optional severity filter
-        current_user: Current authenticated user
-    
-    Returns:
-        List of medical emergencies
     """
     try:
         emergencies = await emergency_service.get_medical_emergencies(severity)

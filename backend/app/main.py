@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import uvicorn
@@ -6,37 +6,30 @@ from typing import Dict, Any, List
 import logging
 from datetime import datetime
 import json
+import os
 
 # Import routes
 from app.routes import (
-    auth, 
-    navigation, 
-    crowds, 
-    queues,
-    emergency, 
-    transport, 
-    volunteer, 
-    accessibility
+    auth, navigation, crowds, queues,
+    emergency, transport, volunteer, accessibility
 )
 
 # Import services
 from app.services import (
-    GeminiService, 
-    AnalyticsService,
-    CrowdManagementService,
-    QueueManagementService,
-    EmergencyService,
-    NavigationService
+    GeminiService, AnalyticsService,
+    CrowdManagementService, QueueManagementService,
+    EmergencyService, NavigationService
 )
 
 # Import models
-from app.models import User
-# or
-from app.models import User, StadiumLayout
+from app.models import User, StadiumData
 
 # Import utilities
 from app.utils.database import Database
 from app.utils.websocket import ConnectionManager
+
+# Import security middleware
+from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -64,30 +57,72 @@ app = FastAPI(
     ]
 )
 
-# CORS middleware
+# ============================================
+# SECURITY MIDDLEWARE
+# ============================================
+
+# CORS - Restrict for production
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "https://stadiumgpt.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# Security middleware
+# Trusted Host Middleware
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["*"]  # Configure for production
 )
 
 # ============================================
-# ✅ FIXED: Initialize services only ONCE
+# ✅ UPDATED: Security Headers with CSP for Swagger UI
 # ============================================
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class CustomSecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # ✅ Updated CSP to allow Swagger UI
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://fastapi.tiangolo.com; "
+            "font-src 'self' data:; "
+            "connect-src 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=()"
+        return response
+
+# Add custom security headers
+app.add_middleware(CustomSecurityHeadersMiddleware)
+
+# Rate Limiting (60 requests per minute)
+app.add_middleware(RateLimitMiddleware, limit=60, window=60)
+
+# ============================================
+# INITIALIZE SERVICES
+# ============================================
+
 gemini_service = GeminiService()
 crowd_service = CrowdManagementService()
 queue_service = QueueManagementService()
 emergency_service = EmergencyService()
 navigation_service = NavigationService()
-db = Database()  # ✅ Only ONE database instance
+db = Database()
 manager = ConnectionManager()
 
 # Include routers
@@ -111,13 +146,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             message_type = data.get("type")
             
             if message_type == "crowd_update":
-                # Process crowd data
                 result = await crowd_service.analyze_crowd(data.get("data", {}))
                 await manager.send_personal_message(
                     {"type": "crowd_response", "data": result},
                     client_id
                 )
-                # Broadcast to all connected clients
                 await manager.broadcast({
                     "type": "crowd_broadcast",
                     "data": result,
@@ -125,13 +158,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 })
                 
             elif message_type == "emergency":
-                # Handle emergency
                 result = await emergency_service.handle_emergency(data.get("data", {}))
                 await manager.send_personal_message(
                     {"type": "emergency_response", "data": result},
                     client_id
                 )
-                # Broadcast emergency to all clients
                 await manager.broadcast({
                     "type": "emergency_alert",
                     "data": result,
@@ -139,7 +170,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 })
                 
             elif message_type == "navigation":
-                # Process navigation request
                 route = await navigation_service.find_route(
                     start=data.get("start"),
                     end=data.get("end"),
@@ -152,7 +182,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 )
                 
             elif message_type == "queue_query":
-                # Get queue information
                 result = await queue_service.predict_wait_time(data.get("establishment"))
                 await manager.send_personal_message(
                     {"type": "queue_response", "data": result},
@@ -160,7 +189,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 )
                 
             elif message_type == "chat":
-                # Process chat message with Gemini
                 context = data.get("context", {})
                 query = data.get("content", "")
                 result = await gemini_service.process_query(query, context)

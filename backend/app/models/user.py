@@ -1,12 +1,11 @@
 from pydantic import BaseModel, EmailStr, Field, validator
-from typing import Optional, List, Dict , Any
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 import re
 
 
 class UserRole(str, Enum):
-    """User role types"""
     FAN = "fan"
     VOLUNTEER = "volunteer"
     STAFF = "staff"
@@ -15,7 +14,6 @@ class UserRole(str, Enum):
 
 
 class UserPreferences(BaseModel):
-    """User preferences model"""
     language: str = "English"
     theme: str = "light"
     notifications: bool = True
@@ -25,7 +23,6 @@ class UserPreferences(BaseModel):
 
 
 class User(BaseModel):
-    """User model"""
     id: str = Field(..., description="Unique user ID")
     name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr = Field(..., description="User email address")
@@ -47,7 +44,6 @@ class User(BaseModel):
 
 
 class UserCreate(BaseModel):
-    """User creation model"""
     name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
     password: str = Field(..., min_length=8)
@@ -56,7 +52,6 @@ class UserCreate(BaseModel):
 
     @validator('password')
     def validate_password(cls, v):
-        """Validate password strength"""
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters')
         if not re.search(r'[A-Z]', v):
@@ -69,7 +64,6 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    """User login model"""
     email: EmailStr
     password: str
 
@@ -81,29 +75,21 @@ class UserLogin(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """User update model"""
     name: Optional[str] = Field(None, min_length=2, max_length=100)
     language: Optional[str] = None
     preferences: Optional[UserPreferences] = None
     accessibility_needs: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
-    @validator('name')
-    def validate_name(cls, v):
-        if v is not None and not v.strip():
-            raise ValueError('Name cannot be empty')
-        return v.strip() if v else v
-
 
 class UserResponse(BaseModel):
-    """User response model"""
     id: str
     name: str
     email: EmailStr
     role: UserRole
     language: str
-    preferences: UserPreferences
-    accessibility_needs: Optional[List[str]]
+    preferences: UserPreferences = UserPreferences()  # ✅ Default value
+    accessibility_needs: Optional[List[str]] = []  # ✅ Default value
     created_at: datetime
     last_active: datetime
     is_verified: bool
@@ -113,14 +99,12 @@ class UserResponse(BaseModel):
 
 
 class Token(BaseModel):
-    """Authentication token model"""
     access_token: str
     token_type: str = "bearer"
     expires_in: int = 3600
 
 
 class TokenData(BaseModel):
-    """Token data model"""
     user_id: Optional[str] = None
     email: Optional[str] = None
     role: Optional[UserRole] = None

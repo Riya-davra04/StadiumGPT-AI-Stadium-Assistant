@@ -10,6 +10,8 @@ from app.utils.validators import validate_location
 from app.routes.auth import get_current_user
 
 logger = logging.getLogger(__name__)
+
+# ✅ Create router instance
 router = APIRouter()
 
 # Initialize services
@@ -28,17 +30,6 @@ async def get_route(
 ) -> Dict[str, Any]:
     """
     Get the optimal route between two locations in the stadium
-    
-    Args:
-        start: Starting location
-        end: Destination location
-        preferences: Route preferences (shortest, fastest, scenic, etc.)
-        accessibility: Enable accessibility mode
-        avoid_crowds: Avoid crowded areas
-        current_user: Current authenticated user
-    
-    Returns:
-        Route information with path, time, and alternatives
     """
     try:
         # Validate locations
@@ -58,30 +49,37 @@ async def get_route(
             start=start,
             end=end,
             preferences=preferences or [],
-            accessibility=accessibility or current_user.get("accessibility_needs"),
+            accessibility=accessibility,
             avoid_crowds=avoid_crowds
         )
         
+        # Convert Route object to dictionary
+        route_dict = {
+            "path": route.path,
+            "estimated_time": route.estimated_time,
+            "accessibility_info": route.accessibility_info,
+            "crowd_level": route.crowd_level,
+            "alternatives": route.alternatives
+        }
+        
         # Add AI-powered recommendations
-        if route:
-            context = {
-                "start": start,
-                "end": end,
-                "preferences": preferences,
-                "accessibility": accessibility
-            }
-            ai_recommendation = await gemini_service.process_query(
-                f"Provide tips for navigating from {start} to {end} in the stadium",
-                context
-            )
-            route["ai_recommendation"] = ai_recommendation.get("response", "")
+        context = {
+            "start": start,
+            "end": end,
+            "preferences": preferences,
+            "accessibility": accessibility
+        }
+        ai_recommendation = await gemini_service.process_query(
+            f"Provide tips for navigating from {start} to {end} in the stadium",
+            context
+        )
+        route_dict["ai_recommendation"] = ai_recommendation.get("response", "")
         
         logger.info(f"Route found from {start} to {end} for user {current_user.get('id')}")
         
         return {
-            "route": route,
-            "timestamp": datetime.utcnow().isoformat(),
-            "user": current_user.get("name")
+            "route": route_dict,
+            "timestamp": datetime.utcnow().isoformat()
         }
         
     except HTTPException:
@@ -103,15 +101,6 @@ async def get_nearby_locations(
 ) -> Dict[str, Any]:
     """
     Get nearby facilities and points of interest
-    
-    Args:
-        location: Current location
-        radius: Search radius in meters
-        facility_type: Filter by facility type
-        current_user: Current authenticated user
-    
-    Returns:
-        List of nearby locations
     """
     try:
         nearby = await navigation_service.get_nearby_locations(
@@ -144,14 +133,6 @@ async def get_directions(
 ) -> Dict[str, Any]:
     """
     Get step-by-step directions
-    
-    Args:
-        start: Starting location
-        end: Destination location
-        current_user: Current authenticated user
-    
-    Returns:
-        Step-by-step directions
     """
     try:
         directions = await navigation_service.get_directions(start, end)
@@ -189,14 +170,6 @@ async def get_accessibility_routes(
 ) -> Dict[str, Any]:
     """
     Get accessible routes for users with disabilities
-    
-    Args:
-        start: Starting location
-        end: Destination location
-        current_user: Current authenticated user
-    
-    Returns:
-        Accessible route information
     """
     try:
         route = await navigation_service.get_accessible_route(start, end)
@@ -228,13 +201,6 @@ async def get_crowd_status(
 ) -> Dict[str, Any]:
     """
     Get crowd status for a specific location
-    
-    Args:
-        location: Location to check
-        current_user: Current authenticated user
-    
-    Returns:
-        Crowd status information
     """
     try:
         status = await navigation_service.get_location_crowd_status(location)
@@ -263,13 +229,6 @@ async def get_emergency_exits(
 ) -> Dict[str, Any]:
     """
     Get nearest emergency exits
-    
-    Args:
-        current_location: Current location
-        current_user: Current authenticated user
-    
-    Returns:
-        List of nearest emergency exits
     """
     try:
         exits = await navigation_service.get_nearest_exits(current_location)

@@ -1,13 +1,15 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import logging
+import uuid
 
 from app.models.user import User, UserCreate, UserLogin, Token, UserResponse
 from app.services.auth import AuthService
 from app.utils.database import Database
 from app.utils.validators import validate_email, validate_password
+from app.utils.security import SecurityUtils
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -19,15 +21,9 @@ db = Database()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserCreate) -> Dict[str, Any]:
+async def register_user(request: Request, user_data: UserCreate) -> Dict[str, Any]:
     """
     Register a new user
-    
-    Args:
-        user_data: User registration data
-    
-    Returns:
-        Created user data
     """
     try:
         # Validate email
@@ -37,6 +33,10 @@ async def register_user(user_data: UserCreate) -> Dict[str, Any]:
                 detail="Invalid email format"
             )
         
+        # Sanitize input
+        user_data.name = SecurityUtils.sanitize_input(user_data.name)
+        user_data.email = SecurityUtils.sanitize_email(user_data.email)
+        
         # Check if user exists
         existing_user = await db.get_user_by_email(user_data.email)
         if existing_user:
@@ -45,11 +45,30 @@ async def register_user(user_data: UserCreate) -> Dict[str, Any]:
                 detail="Email already registered"
             )
         
-        # Create user
-        user = await auth_service.register_user(user_data)
-        logger.info(f"User registered: {user.email}")
+        # Create user with dictionary
+        user_dict = {
+            "id": str(uuid.uuid4()),
+            "name": user_data.name,
+            "email": user_data.email,
+            "password_hash": auth_service._hash_password(user_data.password),
+            "role": user_data.role.value,
+            "language": user_data.language,
+            "preferences": {},  # ✅ Dictionary
+            "accessibility_needs": [],  # ✅ List
+            "created_at": datetime.utcnow().isoformat(),
+            "last_active": datetime.utcnow().isoformat(),
+            "is_verified": 0,
+            "is_active": 1
+        }
         
-        return user
+        # Save to database
+        await db.create_user(user_dict)
+        
+        logger.info(f"User registered: {user_data.email}")
+        
+        # Return user without password
+        user_dict.pop("password_hash", None)
+        return user_dict
         
     except HTTPException:
         raise
@@ -62,15 +81,9 @@ async def register_user(user_data: UserCreate) -> Dict[str, Any]:
 
 
 @router.post("/login", response_model=Token)
-async def login_user(login_data: UserLogin) -> Dict[str, Any]:
+async def login_user(request: Request, login_data: UserLogin) -> Dict[str, Any]:
     """
     Login user and return access token
-    
-    Args:
-        login_data: User login credentials
-    
-    Returns:
-        Access token
     """
     try:
         # Authenticate user
@@ -112,25 +125,14 @@ async def login_user(login_data: UserLogin) -> Dict[str, Any]:
 
 @router.post("/logout")
 async def logout_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    """
-    Logout user
-    
-    Args:
-        token: Access token
-    
-    Returns:
-        Logout confirmation
-    """
+    """Logout user"""
     try:
-        # Invalidate token
         await auth_service.invalidate_token(token)
         logger.info("User logged out")
-        
         return {
             "message": "Logged out successfully",
             "timestamp": datetime.utcnow().isoformat()
         }
-        
     except Exception as e:
         logger.error(f"Logout error: {e}")
         raise HTTPException(
@@ -141,17 +143,8 @@ async def logout_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    """
-    Get current user information
-    
-    Args:
-        token: Access token
-    
-    Returns:
-        Current user data
-    """
+    """Get current user information"""
     try:
-        # Validate token
         payload = await auth_service.verify_token(token)
         if not payload:
             raise HTTPException(
@@ -160,7 +153,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Get user
         user = await db.get_user_by_id(payload.get("sub"))
         if not user:
             raise HTTPException(
@@ -182,25 +174,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any
 
 @router.post("/refresh")
 async def refresh_token(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    """
-    Refresh access token
-    
-    Args:
-        token: Existing access token
-    
-    Returns:
-        New access token
-    """
+    """Refresh access token"""
     try:
-        # Verify and refresh token
         new_token = await auth_service.refresh_token(token)
-        
         return {
             "access_token": new_token,
             "token_type": "bearer",
             "expires_in": 3600
         }
-        
     except Exception as e:
         logger.error(f"Token refresh error: {e}")
         raise HTTPException(
@@ -214,18 +195,8 @@ async def update_profile(
     user_data: Dict[str, Any],
     token: str = Depends(oauth2_scheme)
 ) -> Dict[str, Any]:
-    """
-    Update user profile
-    
-    Args:
-        user_data: Updated user data
-        token: Access token
-    
-    Returns:
-        Updated user data
-    """
+    """Update user profile"""
     try:
-        # Validate token
         payload = await auth_service.verify_token(token)
         if not payload:
             raise HTTPException(
@@ -233,7 +204,6 @@ async def update_profile(
                 detail="Invalid token"
             )
         
-        # Update user
         user = await db.update_user(payload.get("sub"), user_data)
         if not user:
             raise HTTPException(
@@ -242,7 +212,6 @@ async def update_profile(
             )
         
         logger.info(f"User profile updated: {user['email']}")
-        
         return user
         
     except HTTPException:
@@ -261,19 +230,8 @@ async def change_password(
     new_password: str,
     token: str = Depends(oauth2_scheme)
 ) -> Dict[str, Any]:
-    """
-    Change user password
-    
-    Args:
-        current_password: Current password
-        new_password: New password
-        token: Access token
-    
-    Returns:
-        Confirmation message
-    """
+    """Change user password"""
     try:
-        # Validate token
         payload = await auth_service.verify_token(token)
         if not payload:
             raise HTTPException(
@@ -281,7 +239,6 @@ async def change_password(
                 detail="Invalid token"
             )
         
-        # Change password
         result = await auth_service.change_password(
             payload.get("sub"),
             current_password,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket
+from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
@@ -6,7 +6,6 @@ import logging
 from app.services.crowd_management import CrowdManagementService
 from app.services.gemini_service import GeminiService
 from app.models.user import User
-from app.models.stadium import CrowdData
 from app.routes.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -19,21 +18,13 @@ gemini_service = GeminiService()
 
 @router.get("/heatmap")
 async def get_heatmap_data(
-    section: Optional[str] = Query(None, description="Specific section"),
-    current_user: Dict = Depends(get_current_user)
+    current_user: Dict = Depends(get_current_user)  # ✅ Removed section parameter
 ) -> Dict[str, Any]:
     """
     Get crowd heatmap data for the stadium
-    
-    Args:
-        section: Optional section filter
-        current_user: Current authenticated user
-    
-    Returns:
-        Heatmap data with density information
     """
     try:
-        heatmap_data = await crowd_service.get_heatmap_data(section)
+        heatmap_data = await crowd_service.get_heatmap_data()  # ✅ No arguments
         
         # Add AI insights
         ai_insights = await gemini_service.analyze_crowd({
@@ -63,13 +54,6 @@ async def get_crowd_status(
 ) -> Dict[str, Any]:
     """
     Get overall crowd status
-    
-    Args:
-        area: Optional area filter
-        current_user: Current authenticated user
-    
-    Returns:
-        Crowd status information
     """
     try:
         status = await crowd_service.get_current_status(area)
@@ -94,13 +78,6 @@ async def analyze_crowd(
 ) -> Dict[str, Any]:
     """
     Analyze crowd data and get recommendations
-    
-    Args:
-        data: Crowd data to analyze
-        current_user: Current authenticated user
-    
-    Returns:
-        Analysis results with recommendations
     """
     try:
         analysis = await crowd_service.analyze_crowd(data)
@@ -135,13 +112,6 @@ async def get_crowd_predictions(
 ) -> Dict[str, Any]:
     """
     Get crowd predictions for the future
-    
-    Args:
-        minutes: Prediction timeframe in minutes
-        current_user: Current authenticated user
-    
-    Returns:
-        Crowd predictions
     """
     try:
         predictions = await crowd_service.predict_crowd(minutes)
@@ -166,12 +136,6 @@ async def get_crowd_hotspots(
 ) -> Dict[str, Any]:
     """
     Get current crowd hotspots
-    
-    Args:
-        current_user: Current authenticated user
-    
-    Returns:
-        List of hotspots
     """
     try:
         hotspots = await crowd_service.get_hotspots()
@@ -196,12 +160,6 @@ async def get_crowd_recommendations(
 ) -> Dict[str, Any]:
     """
     Get crowd management recommendations
-    
-    Args:
-        current_user: Current authenticated user
-    
-    Returns:
-        List of recommendations
     """
     try:
         recommendations = await crowd_service.get_recommendations()
@@ -226,13 +184,6 @@ async def update_crowd_data(
 ) -> Dict[str, Any]:
     """
     Update crowd data in real-time
-    
-    Args:
-        data: Crowd data to update
-        current_user: Current authenticated user
-    
-    Returns:
-        Update confirmation
     """
     try:
         # Only organizers and admins can update crowd data

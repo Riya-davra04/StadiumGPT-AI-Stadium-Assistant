@@ -1,70 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Paper,
   Typography,
-  Grid,
-  Card,
-  CardContent,
   Button,
-  Chip,
   TextField,
+  Alert,
   MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Alert,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
 } from '@mui/material';
-import {
-  Warning as WarningIcon,  // ✅ Changed from EmergencyIcon
-  MedicalServices,
-  FireExtinguisher,
-  Security,
-  CheckCircle,
-  LocationOn,
-  Phone,
-  People,
-} from '@mui/icons-material';
-import { useWebSocket } from '../context/WebSocketContext';
+import { Warning as WarningIcon } from '@mui/icons-material';
+import { announceToScreenReader, setPageTitle } from '../utils/accessibility';
 
 const Emergency = () => {
-  const { sendMessage } = useWebSocket();
   const [openDialog, setOpenDialog] = useState(false);
   const [emergencyType, setEmergencyType] = useState('medical');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  const [activeAlerts, setActiveAlerts] = useState([
-    {
-      id: 1,
-      type: 'medical',
-      location: 'Section A',
-      severity: 'medium',
-      status: 'active',
-      time: '2 min ago',
-    },
-    {
-      id: 2,
-      type: 'security',
-      location: 'Gate B',
-      severity: 'low',
-      status: 'responded',
-      time: '15 min ago',
-    },
-  ]);
+  const formRef = useRef(null);
 
-  const emergencyTypes = [
-    { value: 'medical', label: 'Medical', icon: <MedicalServices /> },
-    { value: 'fire', label: 'Fire', icon: <FireExtinguisher /> },
-    { value: 'security', label: 'Security', icon: <Security /> },
-    { value: 'crowd', label: 'Crowd Issue', icon: <People /> },
-  ];
+  useEffect(() => {
+    setPageTitle('Emergency - Report an Emergency');
+  }, []);
 
   const locations = [
     'Gate A', 'Gate B', 'Gate C', 'Gate D', 'Gate E',
@@ -75,274 +36,125 @@ const Emergency = () => {
     'First Aid Station', 'Guest Services',
   ];
 
-  const handleSubmit = async () => {
-    try {
-      await sendMessage('emergency', {
-        type: emergencyType,
-        location,
-        description,
-        severity: 'medium',
-      });
-      setSubmitted(true);
-      setTimeout(() => {
-        setOpenDialog(false);
-        setSubmitted(false);
-        setDescription('');
-        setLocation('');
-      }, 3000);
-    } catch (error) {
-      console.error('Emergency report error:', error);
-    }
-  };
-
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'medical': return 'error';
-      case 'fire': return 'error';
-      case 'security': return 'warning';
-      case 'crowd': return 'warning';
-      default: return 'info';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'error';
-      case 'responded': return 'warning';
-      case 'resolved': return 'success';
-      default: return 'default';
-    }
+  const handleSubmit = () => {
+    setSubmitted(true);
+    announceToScreenReader('Emergency reported successfully. Help is on the way.', 'assertive');
+    setTimeout(() => {
+      setOpenDialog(false);
+      setSubmitted(false);
+      setDescription('');
+      setLocation('');
+      announceToScreenReader('Dialog closed', 'polite');
+    }, 3000);
   };
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight={700}>
-            Emergency
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Report emergencies and view active alerts
-          </Typography>
-        </Box>
+    <Box 
+      component="main"
+      role="main"
+      aria-label="Emergency reporting page"
+    >
+      <Typography 
+        variant="h4" 
+        component="h1" 
+        sx={{ mb: 3 }}
+        tabIndex={0}
+      >
+        🚨 Emergency
+      </Typography>
+      
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Report emergencies and view active alerts
+      </Typography>
+
+      <Paper 
+        sx={{ p: 3, borderRadius: 3 }}
+        role="region"
+        aria-label="Emergency reporting form"
+      >
         <Button
           variant="contained"
           color="error"
-          startIcon={<WarningIcon />}  // ✅ Changed from EmergencyIcon
-          onClick={() => setOpenDialog(true)}
-          sx={{ borderRadius: 2 }}
+          size="large"
+          startIcon={<WarningIcon />}
+          onClick={() => {
+            setOpenDialog(true);
+            announceToScreenReader('Emergency reporting dialog opened', 'polite');
+          }}
+          sx={{ minHeight: 56 }}
+          aria-label="Report an emergency"
         >
           Report Emergency
         </Button>
-      </Box>
 
-      <Grid container spacing={3}>
-        {/* Emergency Contacts */}
-        <Grid item xs={12} md={4}>
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                Emergency Contacts
-              </Typography>
-              <List dense>
-                <ListItem>
-                  <ListItemIcon>
-                    <MedicalServices color="error" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Medical Team"
-                    secondary="Call: 111"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <Security color="warning" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Security"
-                    secondary="Call: 112"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <FireExtinguisher color="error" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Fire Department"
-                    secondary="Call: 113"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <Phone color="primary" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="General Emergency"
-                    secondary="Call: 911"
-                  />
-                </ListItem>
-              </List>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                First Aid Stations
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                📍 Section A - Main Level
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                📍 Section C - Upper Level
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                📍 Section E - Lower Level
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Box sx={{ mt: 3 }}>
+          <Alert 
+            severity="warning" 
+            role="alert"
+            aria-live="polite"
+          >
+            ⚠️ Only use this for real emergencies. False reports are prohibited.
+          </Alert>
+        </Box>
+      </Paper>
 
-        {/* Active Alerts */}
-        <Grid item xs={12} md={8}>
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                Active Alerts
-              </Typography>
-              {activeAlerts.length > 0 ? (
-                <List>
-                  {activeAlerts.map((alert) => (
-                    <React.Fragment key={alert.id}>
-                      <ListItem>
-                        <ListItemIcon>
-                          <WarningIcon color={getTypeColor(alert.type)} />  {/* ✅ Changed */}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <Typography variant="subtitle2" fontWeight={600}>
-                                {alert.type.toUpperCase()}
-                              </Typography>
-                              <Chip
-                                label={alert.status}
-                                size="small"
-                                color={getStatusColor(alert.status)}
-                              />
-                              <Chip
-                                label={alert.severity}
-                                size="small"
-                                color={alert.severity === 'critical' ? 'error' : 'warning'}
-                              />
-                            </Box>
-                          }
-                          secondary={
-                            <Box>
-                              <Typography variant="body2">
-                                📍 {alert.location}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {alert.time}
-                              </Typography>
-                            </Box>
-                          }
-                        />
-                        {alert.status === 'active' && (
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="primary"
-                          >
-                            Respond
-                          </Button>
-                        )}
-                      </ListItem>
-                      <Divider />
-                    </React.Fragment>
-                  ))}
-                </List>
-              ) : (
-                <Alert severity="success" icon={<CheckCircle />}>
-                  No active emergencies
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Emergency Tips */}
-        <Grid item xs={12}>
-          <Card sx={{ borderRadius: 3, bgcolor: 'warning.light' }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                🚨 Emergency Tips
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CheckCircle color="success" />
-                    <Typography variant="body2">
-                      Stay calm and follow instructions
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CheckCircle color="success" />
-                    <Typography variant="body2">
-                      Locate nearest emergency exit
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CheckCircle color="success" />
-                    <Typography variant="body2">
-                      Assist others who need help
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CheckCircle color="success" />
-                    <Typography variant="body2">
-                      Follow emergency personnel directions
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Report Emergency Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
+      {/* Emergency Dialog */}
+      <Dialog 
+        open={openDialog} 
+        onClose={() => {
+          setOpenDialog(false);
+          announceToScreenReader('Dialog closed', 'polite');
+        }}
+        maxWidth="sm" 
+        fullWidth
+        aria-labelledby="emergency-dialog-title"
+      >
+        <DialogTitle id="emergency-dialog-title">
           <Box display="flex" alignItems="center" gap={1}>
-            <WarningIcon color="error" />  {/* ✅ Changed */}
-            <Typography variant="h6" fontWeight={700}>
+            <WarningIcon color="error" />
+            <Typography variant="h6" component="span" fontWeight={700}>
               Report Emergency
             </Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
           {submitted ? (
-            <Alert severity="success" icon={<CheckCircle />} sx={{ mt: 2 }}>
+            <Alert 
+              severity="success" 
+              icon={<WarningIcon />}
+              role="status"
+              aria-live="polite"
+            >
               Emergency reported successfully! Help is on the way.
             </Alert>
           ) : (
-            <Box sx={{ mt: 1 }}>
+            <form 
+              ref={formRef}
+              noValidate
+              aria-label="Emergency report form"
+            >
               <TextField
                 select
                 fullWidth
-                label="Emergency Type"
+                label="Emergency Type *"
                 value={emergencyType}
                 onChange={(e) => setEmergencyType(e.target.value)}
                 margin="normal"
+                required
+                aria-required="true"
+                aria-label="Select emergency type"
+                helperText="Select the type of emergency"
+                SelectProps={{
+                  MenuProps: {
+                    MenuListProps: {
+                      'aria-label': 'Emergency type options'
+                    }
+                  }
+                }}
               >
-                {emergencyTypes.map((type) => (
-                  <MenuItem key={type.value} value={type.value}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      {type.icon}
-                      {type.label}
-                    </Box>
+                {['medical', 'fire', 'security', 'crowd'].map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
                   </MenuItem>
                 ))}
               </TextField>
@@ -350,10 +162,14 @@ const Emergency = () => {
               <TextField
                 select
                 fullWidth
-                label="Location"
+                label="Location *"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 margin="normal"
+                required
+                aria-required="true"
+                aria-label="Select location"
+                helperText="Select the location of the emergency"
               >
                 {locations.map((loc) => (
                   <MenuItem key={loc} value={loc}>{loc}</MenuItem>
@@ -364,21 +180,40 @@ const Emergency = () => {
                 fullWidth
                 multiline
                 rows={3}
-                label="Description"
+                label="Description *"
                 placeholder="Please describe the emergency..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 margin="normal"
+                required
+                aria-required="true"
+                aria-label="Describe the emergency"
+                helperText="Provide details about the emergency"
+                inputProps={{
+                  maxLength: 500,
+                  'aria-describedby': 'description-helper'
+                }}
               />
 
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                Only use this for real emergencies. False reports are prohibited.
+              <Alert 
+                severity="warning" 
+                sx={{ mt: 2 }}
+                role="alert"
+                aria-live="polite"
+              >
+                ⚠️ Only use this for real emergencies. False reports are prohibited.
               </Alert>
-            </Box>
+            </form>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>
+          <Button 
+            onClick={() => {
+              setOpenDialog(false);
+              announceToScreenReader('Dialog closed', 'polite');
+            }}
+            aria-label="Cancel and close dialog"
+          >
             Cancel
           </Button>
           <Button
@@ -386,6 +221,7 @@ const Emergency = () => {
             color="error"
             onClick={handleSubmit}
             disabled={!location || !description || submitted}
+            aria-label="Submit emergency report"
           >
             Submit Emergency
           </Button>

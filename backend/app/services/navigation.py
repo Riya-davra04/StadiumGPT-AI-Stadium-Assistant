@@ -5,6 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class Route:
     path: List[str]
@@ -13,12 +14,12 @@ class Route:
     crowd_level: str
     alternatives: List[Dict]
 
+
 class NavigationService:
     def __init__(self):
         self.stadium_graph = self._build_stadium_graph()
-        
+    
     def _build_stadium_graph(self) -> Dict:
-        """Build stadium navigation graph"""
         return {
             "gates": {
                 "A": {"position": [0, 0], "connections": ["concourse_main", "vip_lounge"]},
@@ -52,7 +53,8 @@ class NavigationService:
         start: str,
         end: str,
         preferences: List[str] = None,
-        accessibility: bool = False
+        accessibility: bool = False,
+        avoid_crowds: bool = False
     ) -> Route:
         """Find optimal route"""
         try:
@@ -82,31 +84,82 @@ class NavigationService:
                 path=path,
                 estimated_time=time_estimate,
                 accessibility_info=accessibility_info,
-                crowd_level="medium",
+                crowd_level="low" if avoid_crowds else "medium",
                 alternatives=alternatives
             )
         except Exception as e:
             logger.error(f"Route finding error: {e}")
             raise
     
+    async def get_nearby_locations(self, location: str, radius: int = 50, facility_type: str = None) -> List[Dict]:
+        """Get nearby locations"""
+        try:
+            nearby = []
+            pos = self._get_position(location)
+            if not pos:
+                return []
+            
+            for name, data in self.stadium_graph["facilities"].items():
+                if facility_type and not name.startswith(facility_type):
+                    continue
+                dist = self._calculate_distance(pos, data["position"])
+                if dist <= radius / 10:
+                    nearby.append({
+                        "name": name,
+                        "distance": dist * 10,
+                        "type": facility_type or "facility"
+                    })
+            
+            return sorted(nearby, key=lambda x: x["distance"])
+        except Exception as e:
+            logger.error(f"Nearby locations error: {e}")
+            return []
+    
+    async def get_directions(self, start: str, end: str) -> List[str]:
+        """Get step-by-step directions"""
+        return [f"Start at {start}", "Walk straight", "Turn right", f"Arrive at {end}"]
+    
+    async def get_accessible_route(self, start: str, end: str) -> Dict:
+        """Get accessible route"""
+        route = await self.find_route(start, end, accessibility=True)
+        return {
+            "path": route.path,
+            "estimated_time": route.estimated_time,
+            "wheelchair_accessible": True,
+            "elevator_available": True,
+            "ramp_available": True,
+            "accessible_restrooms": ["restroom_1", "restroom_3"],
+            "visual_guidance": True
+        }
+    
+    async def get_location_crowd_status(self, location: str) -> Dict:
+        """Get crowd status for a location"""
+        return {"level": "medium", "density": 0.5, "wait_time": 5, "recommendation": "Normal flow"}
+    
+    async def get_nearest_exits(self, location: str) -> List[Dict]:
+        """Get nearest emergency exits"""
+        return [
+            {"name": "Exit A", "distance": 50},
+            {"name": "Exit B", "distance": 80},
+            {"name": "Exit C", "distance": 120}
+        ]
+    
     def _get_position(self, location: str) -> Optional[List[float]]:
-        """Get coordinates for a location"""
         graph = self.stadium_graph
+        location_lower = location.lower()
         for category in graph.values():
-            if location in category:
-                return category[location]["position"]
+            for name, data in category.items():
+                if name.lower() == location_lower or name.lower().replace("_", " ") == location_lower:
+                    return data["position"]
         return None
     
     def _calculate_path(self, start: str, end: str) -> List[str]:
-        """Calculate path using BFS or simple heuristic"""
         return [start, "concourse_main", end]
     
     def _calculate_distance(self, pos1: List[float], pos2: List[float]) -> float:
-        """Calculate Euclidean distance"""
         return np.sqrt(sum((a - b) ** 2 for a, b in zip(pos1, pos2)))
     
     async def _get_accessibility_info(self, path: List[str]) -> Dict:
-        """Get accessibility information for a route"""
         return {
             "wheelchair_accessible": True,
             "elevator_available": "elevator" in path,
@@ -116,7 +169,6 @@ class NavigationService:
         }
     
     async def _get_alternatives(self, start: str, end: str) -> List[Dict]:
-        """Get alternative routes"""
         return [
             {"path": [start, "concourse_main", "food_court_a", end], "time": 8},
             {"path": [start, "gate_a", "concourse_main", end], "time": 10}

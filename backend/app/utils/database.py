@@ -3,12 +3,12 @@ import json
 import os
 from typing import Dict, Any, Optional
 from datetime import datetime
-import hashlib
 import uuid
 
 class Database:
+    """Simple database without Redis dependency"""
+    
     def __init__(self):
-        # Database file will be created in the backend folder
         self.db_path = os.path.join(os.path.dirname(__file__), '..', '..', 'stadium.db')
         self._init_db()
         print(f"✅ Database initialized at: {self.db_path}")
@@ -18,7 +18,7 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Users table
+        # Users table with accessibility_needs column
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
@@ -28,12 +28,23 @@ class Database:
                 role TEXT DEFAULT 'fan',
                 language TEXT DEFAULT 'English',
                 preferences TEXT,
+                accessibility_needs TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 last_active TEXT DEFAULT CURRENT_TIMESTAMP,
                 is_verified INTEGER DEFAULT 0,
                 is_active INTEGER DEFAULT 1
             )
         ''')
+        
+        # ✅ Add column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN accessibility_needs TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Index for faster queries
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)")
         
         # Stadium data table
         cursor.execute('''
@@ -91,40 +102,74 @@ class Database:
         """Get database connection"""
         return sqlite3.connect(self.db_path)
     
-    # ============ USER METHODS ============
-    
     async def get_user_by_email(self, email: str) -> Optional[Dict]:
-        """Get user by email"""
-        conn = self.get_connection()
+        """Get user by email with JSON parsing"""
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
         row = cursor.fetchone()
         conn.close()
-        return dict(row) if row else None
+        
+        if row:
+            user_data = dict(row)
+            # Parse JSON fields
+            user_data['preferences'] = self._parse_json(user_data.get('preferences', '{}'))
+            user_data['accessibility_needs'] = self._parse_json_list(user_data.get('accessibility_needs', '[]'))
+            return user_data
+        return None
     
     async def get_user_by_id(self, user_id: str) -> Optional[Dict]:
-        """Get user by ID"""
-        conn = self.get_connection()
+        """Get user by ID with JSON parsing"""
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         conn.close()
-        return dict(row) if row else None
+        
+        if row:
+            user_data = dict(row)
+            # Parse JSON fields
+            user_data['preferences'] = self._parse_json(user_data.get('preferences', '{}'))
+            user_data['accessibility_needs'] = self._parse_json_list(user_data.get('accessibility_needs', '[]'))
+            return user_data
+        return None
+    
+    def _parse_json(self, value: str) -> Dict:
+        """Parse JSON string to dict"""
+        if not value:
+            return {}
+        try:
+            return json.loads(value)
+        except:
+            return {}
+    
+    def _parse_json_list(self, value: str) -> List:
+        """Parse JSON string to list"""
+        if not value:
+            return []
+        try:
+            return json.loads(value)
+        except:
+            return []
     
     async def create_user(self, user_data: Dict) -> Dict:
-        """Create new user"""
-        conn = self.get_connection()
+        """Create new user with JSON serialization"""
+        conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Generate ID if not provided
-        if not user_data.get('id'):
-            user_data['id'] = str(uuid.uuid4())
+        # Convert dict/list to JSON strings
+        preferences = json.dumps(user_data.get('preferences', {}))
+        accessibility_needs = json.dumps(user_data.get('accessibility_needs', []))
         
         cursor.execute('''
-            INSERT INTO users (id, name, email, password_hash, role, language, preferences)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (
+                id, name, email, password_hash, role, language, 
+                preferences, accessibility_needs, created_at, last_active, 
+                is_verified, is_active
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             user_data.get('id'),
             user_data.get('name'),
@@ -132,7 +177,12 @@ class Database:
             user_data.get('password_hash'),
             user_data.get('role', 'fan'),
             user_data.get('language', 'English'),
-            json.dumps(user_data.get('preferences', {}))
+            preferences,
+            accessibility_needs,
+            user_data.get('created_at', datetime.utcnow().isoformat()),
+            user_data.get('last_active', datetime.utcnow().isoformat()),
+            1 if user_data.get('is_verified') else 0,
+            1 if user_data.get('is_active') else 1
         ))
         conn.commit()
         conn.close()
@@ -140,186 +190,39 @@ class Database:
     
     async def update_user(self, user_id: str, user_data: Dict) -> Optional[Dict]:
         """Update user data"""
-        conn = self.get_connection()
+        conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         updates = []
         values = []
         
         for key, value in user_data.items():
-            if key in ['name', 'language', 'preferences']:
+            if key in ['name', 'language', 'preferences', 'accessibility_needs']:
                 updates.append(f"{key} = ?")
                 if key == 'preferences':
+                    values.append(json.dumps(value))
+                elif key == 'accessibility_needs':
                     values.append(json.dumps(value))
                 else:
                     values.append(value)
         
-        if not updates:
-            conn.close()
-            return await self.get_user_by_id(user_id)
-        
-        values.append(user_id)
-        query = f"UPDATE users SET {', '.join(updates)}, last_active = CURRENT_TIMESTAMP WHERE id = ?"
-        cursor.execute(query, values)
-        conn.commit()
+        if updates:
+            values.append(user_id)
+            query = f"UPDATE users SET {', '.join(updates)}, last_active = CURRENT_TIMESTAMP WHERE id = ?"
+            cursor.execute(query, values)
+            conn.commit()
         conn.close()
-        
         return await self.get_user_by_id(user_id)
-    
-    # ============ STADIUM METHODS ============
-    
-    async def get_stadium_data(self) -> Dict:
-        """Get stadium data"""
-        conn = self.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM stadium_data LIMIT 1")
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row:
-            return dict(row)
-        
-        # Create default stadium data
-        default_data = {
-            'id': 'stadium_1',
-            'name': 'FIFA World Cup Stadium',
-            'capacity': 80000,
-            'current_attendance': 45000,
-            'event_name': 'FIFA World Cup',
-            'updated_at': datetime.utcnow().isoformat()
-        }
-        
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO stadium_data (id, name, capacity, current_attendance, event_name)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (default_data['id'], default_data['name'], default_data['capacity'], 
-              default_data['current_attendance'], default_data['event_name']))
-        conn.commit()
-        conn.close()
-        
-        return default_data
-    
-    # ============ CROWD METHODS ============
-    
-    async def save_crowd_data(self, section: str, density: float):
-        """Save crowd data"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO crowd_data (section, density)
-            VALUES (?, ?)
-        ''', (section, density))
-        conn.commit()
-        conn.close()
-    
-    async def get_latest_crowd_data(self) -> list:
-        """Get latest crowd data"""
-        conn = self.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT * FROM crowd_data 
-            ORDER BY timestamp DESC 
-            LIMIT 50
-        ''')
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    
-    # ============ QUEUE METHODS ============
-    
-    async def save_queue_data(self, establishment: str, queue_length: int, wait_time: int, status: str):
-        """Save queue data"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO queue_data (establishment, queue_length, wait_time, status)
-            VALUES (?, ?, ?, ?)
-        ''', (establishment, queue_length, wait_time, status))
-        conn.commit()
-        conn.close()
-    
-    async def get_latest_queue_data(self) -> list:
-        """Get latest queue data"""
-        conn = self.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT * FROM queue_data 
-            ORDER BY timestamp DESC 
-            LIMIT 20
-        ''')
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    
-    # ============ EMERGENCY METHODS ============
-    
-    async def save_emergency_alert(self, alert_data: Dict) -> Dict:
-        """Save emergency alert"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        alert_id = str(uuid.uuid4())
-        cursor.execute('''
-            INSERT INTO emergency_alerts (id, type, severity, location, description, status, reported_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            alert_id,
-            alert_data.get('type'),
-            alert_data.get('severity', 'medium'),
-            alert_data.get('location'),
-            alert_data.get('description'),
-            'active',
-            alert_data.get('reported_by')
-        ))
-        conn.commit()
-        conn.close()
-        
-        return {**alert_data, 'id': alert_id, 'status': 'active'}
-    
-    async def get_active_emergencies(self) -> list:
-        """Get active emergencies"""
-        conn = self.get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT * FROM emergency_alerts 
-            WHERE status = 'active'
-            ORDER BY timestamp DESC
-        ''')
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    
-    async def resolve_emergency(self, alert_id: str) -> bool:
-        """Resolve an emergency"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE emergency_alerts 
-            SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ''', (alert_id,))
-        conn.commit()
-        affected = cursor.rowcount
-        conn.close()
-        return affected > 0
     
     async def check_connection(self) -> bool:
         """Check database connection"""
         try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
+            conn = sqlite3.connect(self.db_path)
             conn.close()
             return True
         except:
             return False
     
     async def close_connection(self):
-        """Close database connection (for SQLite, nothing to close)"""
+        """Close database connection"""
         pass
