@@ -32,61 +32,52 @@ class TestDigitalTwin:
         })
         return response.json()["access_token"]
     
-    def test_get_simulation_status(self, auth_token):
-        """Test getting simulation status"""
+    def test_predict_congestion(self, auth_token):
+        """Test congestion prediction"""
         response = client.get(
-            "/api/digital-twin/status",
-            headers={"Authorization": f"Bearer {auth_token}"}
-        )
-        assert response.status_code == 200
-        assert "running" in response.json()
-        assert "sections_count" in response.json()
-    
-    def test_predict_crowd(self, auth_token):
-        """Test crowd prediction"""
-        response = client.get(
-            "/api/digital-twin/predict/crowd?minutes=15",
+            "/api/digital-twin/predict/congestion?minutes=30",
             headers={"Authorization": f"Bearer {auth_token}"}
         )
         assert response.status_code == 200
         assert "predictions" in response.json()
         assert "summary" in response.json()
-        assert "critical_sections" in response.json()["summary"]
+        assert "actionable_alerts" in response.json()
     
-    def test_get_heatmap(self, auth_token):
-        """Test getting heatmap data"""
+    def test_predict_congestion_specific_section(self, auth_token):
+        """Test congestion prediction for specific section"""
         response = client.get(
-            "/api/digital-twin/heatmap",
+            "/api/digital-twin/predict/congestion?section=A1&minutes=15",
             headers={"Authorization": f"Bearer {auth_token}"}
         )
         assert response.status_code == 200
-        assert "data" in response.json()
-        assert "legend" in response.json()
+        assert "predictions" in response.json()
+        assert "A1" in response.json()["predictions"]
     
-    def test_get_section_status(self, auth_token):
-        """Test getting section status"""
+    def test_realtime_dashboard(self, auth_token):
+        """Test real-time dashboard"""
         response = client.get(
-            "/api/digital-twin/section/A1",
+            "/api/digital-twin/dashboard",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        assert "sections" in response.json()
+        assert "summary" in response.json()
+    
+    def test_predict_congestion_invalid_section(self, auth_token):
+        """Test congestion prediction with invalid section"""
+        response = client.get(
+            "/api/digital-twin/predict/congestion?section=Z9",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        assert "error" in response.json()["predictions"]
+    
+    def test_create_alert(self, auth_token):
+        """Test creating an alert"""
+        response = client.post(
+            "/api/digital-twin/alert/A1?message=High%20congestion%20detected",
             headers={"Authorization": f"Bearer {auth_token}"}
         )
         assert response.status_code == 200
         assert "section" in response.json()
-        assert "density" in response.json()
-    
-    def test_start_simulation(self, auth_token):
-        """Test starting simulation"""
-        response = client.post(
-            "/api/digital-twin/simulation/start",
-            headers={"Authorization": f"Bearer {auth_token}"}
-        )
-        assert response.status_code == 200
-        assert "simulation_started" in response.json()["status"]
-    
-    def test_stop_simulation(self, auth_token):
-        """Test stopping simulation"""
-        response = client.post(
-            "/api/digital-twin/simulation/stop",
-            headers={"Authorization": f"Bearer {auth_token}"}
-        )
-        assert response.status_code == 200
-        assert "simulation_stopped" in response.json()["status"]
+        assert "message" in response.json()

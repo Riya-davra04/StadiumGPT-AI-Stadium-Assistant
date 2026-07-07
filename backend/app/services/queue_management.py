@@ -1,7 +1,15 @@
+"""
+Queue Management Service
+========================
+Handles real-time queue predictions and recommendations for:
+- Food stalls
+- Restrooms
+- Merchandise stores
+"""
+
 from typing import Dict, List, Any, Optional
-import numpy as np
-from datetime import datetime, timedelta
 import random
+from datetime import datetime
 import logging
 from app.utils.batch import CacheManager
 
@@ -9,8 +17,19 @@ logger = logging.getLogger(__name__)
 
 
 class QueueManagementService:
-    def __init__(self):
-        self.establishments = {
+    """
+    Service for predicting and managing queue wait times.
+    
+    This service provides:
+    - Real-time queue length predictions
+    - Wait time estimates
+    - Alternative recommendations
+    - Historical trend analysis
+    """
+    
+    def __init__(self) -> None:
+        """Initialize the queue management service."""
+        self.establishments: Dict[str, Dict] = {
             "food_a": {"type": "food", "capacity": 50, "avg_service_time": 3},
             "food_b": {"type": "food", "capacity": 40, "avg_service_time": 2.5},
             "food_c": {"type": "food", "capacity": 60, "avg_service_time": 3.5},
@@ -20,11 +39,28 @@ class QueueManagementService:
             "merch_1": {"type": "merch", "capacity": 20, "avg_service_time": 2},
             "merch_2": {"type": "merch", "capacity": 15, "avg_service_time": 2.5}
         }
-        self.cache = CacheManager(default_ttl=5)
-        self.queue_data = {}
+        self.cache: CacheManager = CacheManager(default_ttl=5)
+        self.queue_data: Dict[str, int] = {}
     
     async def predict_wait_time(self, establishment: str) -> Dict[str, Any]:
-        """Predict wait time with caching"""
+        """
+        Predict wait time for a specific establishment.
+        
+        Args:
+            establishment: Establishment ID (e.g., 'food_a', 'restroom_1')
+            
+        Returns:
+            Dict containing:
+            - queue_length: Current queue length
+            - estimated_wait: Estimated wait time in minutes
+            - status: 'available', 'busy', or 'crowded'
+            - recommendation: Suggested alternative if wait is too long
+            
+        Example:
+            >>> result = await queue_service.predict_wait_time('food_a')
+            >>> print(result['estimated_wait'])
+            '5'
+        """
         if establishment not in self.establishments:
             return {"error": "Establishment not found"}
         
@@ -71,7 +107,15 @@ class QueueManagementService:
         return result
     
     async def get_alternatives(self, establishment: str) -> List[Dict]:
-        """Get alternative establishments"""
+        """
+        Get alternative establishments with lower wait times.
+        
+        Args:
+            establishment: Current establishment ID
+            
+        Returns:
+            List of alternatives with wait times
+        """
         if establishment.startswith("food"):
             alternatives = [
                 {"name": "food_b", "wait_time": random.randint(3, 8)},
@@ -86,88 +130,3 @@ class QueueManagementService:
             alternatives = []
         
         return [alt for alt in alternatives if alt["name"] != establishment]
-    
-    async def get_all_queues(self) -> Dict[str, Any]:
-        """Get all queue statuses efficiently"""
-        results = {}
-        for name in self.establishments:
-            results[name] = await self.predict_wait_time(name)
-        
-        return {
-            "queues": results,
-            "timestamp": datetime.utcnow().isoformat(),
-            "summary": {
-                "food_queues": [name for name in results if name.startswith("food")],
-                "restroom_queues": [name for name in results if name.startswith("restroom")],
-                "merch_queues": [name for name in results if name.startswith("merch")]
-            }
-        }
-    
-    async def find_best_option(self, category: str, max_wait: int = 10) -> Optional[Dict]:
-        """
-        Find the best queue option based on category and max wait time
-        
-        Args:
-            category (str): Category to search (food, restroom, merch)
-            max_wait (int): Maximum acceptable wait time in minutes
-        
-        Returns:
-            Optional[Dict]: Best option found, or None
-        """
-        try:
-            options = []
-            
-            for name, data in self.establishments.items():
-                if name.startswith(category):
-                    status = await self.predict_wait_time(name)
-                    wait_time = status.get("estimated_wait", 999)
-                    if wait_time <= max_wait:
-                        options.append({
-                            "name": name,
-                            "wait_time": wait_time,
-                            "status": status.get("status", "unknown"),
-                            "queue_length": status.get("queue_length", 0)
-                        })
-            
-            if options:
-                return min(options, key=lambda x: x["wait_time"])
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Find best option error: {e}")
-            return None
-    
-    async def get_recommendations(self, current_location: str, category: str = None) -> List[Dict]:
-        """Get personalized queue recommendations"""
-        recommendations = []
-        
-        for name, data in self.establishments.items():
-            if category and not name.startswith(category):
-                continue
-            status = await self.predict_wait_time(name)
-            if status.get("status") == "available" and status.get("queue_length", 0) < 10:
-                recommendations.append({
-                    "name": name,
-                    "wait_time": status.get("estimated_wait", 0),
-                    "queue_length": status.get("queue_length", 0),
-                    "status": "Recommended"
-                })
-        
-        return sorted(recommendations, key=lambda x: x["wait_time"])[:5]
-    
-    async def update_queue(self, data: Dict) -> Dict:
-        """Update queue data"""
-        try:
-            establishment = data.get("establishment")
-            queue_length = data.get("queue_length")
-            
-            if establishment and queue_length is not None:
-                self.queue_data[establishment] = queue_length
-                # Clear cache for this establishment
-                self.cache.clear(f"queue:{establishment}")
-            
-            return {"status": "updated", "timestamp": datetime.utcnow().isoformat()}
-        except Exception as e:
-            logger.error(f"Update queue error: {e}")
-            raise
